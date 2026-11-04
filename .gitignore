@@ -1,0 +1,14 @@
+# Build output
+/build/
+/cmake-build-*/
+
+# Local scratch files
+/.scratch/
+
+# Local secrets
+.env
+.env.*
+!.env.example
+
+# macOS
+.DS_Store
