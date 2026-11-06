@@ -353,6 +353,8 @@ Controller::Controller(const std::vector<Lesson> &ls, Store &s)
 bool Controller::persist() {
   bool ok = store.save(profile);
   notice = store.status();
+  if (ok)
+    pendingSubmission = false;
   return ok;
 }
 bool Controller::issue(int l, int q) {
@@ -390,7 +392,16 @@ bool Controller::help(int l, int q) {
   bool saved = persist();
   return saved || !store.writable();
 }
+void Controller::retry() {
+  if (pendingSubmission) {
+    notice = "Retry save before starting another attempt.";
+    return;
+  }
+  submitted.clear();
+}
 Result Controller::submit(int l, int q, const std::string &a) {
+  if (pendingSubmission)
+    return {Verdict::Invalid, "Retry save before starting another attempt."};
   const auto &question = lessons.at(l).questions.at(q);
   if (submitted == question.id)
     return {Verdict::Invalid,
@@ -411,12 +422,13 @@ Result Controller::submit(int l, int q, const std::string &a) {
     profile.review.erase(question.id);
   } else
     profile.review.insert(question.id);
+  submitted = question.id;
+  pendingSubmission = store.writable();
   bool saved = persist();
   if (store.writable() && !saved) {
     return {Verdict::Invalid,
             "Could not save the result. Retry save before checking again."};
   }
-  submitted = question.id;
   return r;
 }
 std::string Controller::status(int l, int q) const {
@@ -499,6 +511,7 @@ bool Controller::reset() {
     return false;
   }
   submitted.clear();
+  pendingSubmission = false;
   notice = store.status();
   return true;
 }

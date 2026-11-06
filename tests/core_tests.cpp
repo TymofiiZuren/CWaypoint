@@ -268,6 +268,26 @@ int main() {
       check(c.submit(0, 2, lessons[0].questions[2].answer).kind ==
                 Verdict::Invalid,
             "no result displayed before failed save");
+      c.retry();
+      check(c.submit(0, 2, lessons[0].questions[2].answer).kind ==
+                Verdict::Invalid,
+            "pending save blocks retry submission");
+      check(c.profile.evidence.at("c-var-fresh").attempts == 1,
+            "failed-save duplicate does not inflate attempts");
+      std::filesystem::rename(failing / "generation-1.save.tmp",
+                              failing / "blocked-write-fixture");
+      check(c.save(), "retry save persists pending result");
+      Controller restored(lessons, store);
+      check(restored.profile.evidence.at("c-var-fresh").attempts == 1 &&
+                restored.solved(0, 2),
+            "pending result recovers once");
+      check(c.submit(0, 2, lessons[0].questions[2].answer).kind ==
+                Verdict::Invalid,
+            "saved pending result still requires explicit retry");
+      c.retry();
+      check(c.submit(0, 2, lessons[0].questions[2].answer).kind ==
+                Verdict::Correct,
+            "explicit retry admitted after save recovery");
     }
     auto broken = dir / "blocked";
     std::filesystem::create_directories(broken);

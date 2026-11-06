@@ -78,6 +78,7 @@ class Controller {
   const std::vector<Lesson> &lessons;
   Store &store;
   std::string submitted;
+  bool pendingSubmission = false;
   bool persist();
 
 public:
@@ -87,7 +88,7 @@ public:
   bool issue(int lesson, int question);
   bool help(int lesson, int question);
   Result submit(int lesson, int question, const std::string &);
-  void retry() { submitted.clear(); }
+  void retry();
   std::string status(int lesson, int question) const;
   std::vector<ReviewItem> reviewItems(const std::string &track = "") const;
   bool solved(int lesson, int question) const;
