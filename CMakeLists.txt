@@ -1,0 +1,36 @@
+cmake_minimum_required(VERSION 3.20)
+project(CWaypoint VERSION 0.1.0 LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(RAYLIB REQUIRED IMPORTED_TARGET raylib)
+add_library(cwaypoint_core src/core.cpp src/sample_content.cpp)
+target_include_directories(cwaypoint_core PUBLIC src)
+target_compile_options(cwaypoint_core PRIVATE -Wall -Wextra -Wpedantic)
+add_executable(CWaypoint MACOSX_BUNDLE src/main.cpp src/text_input.cpp)
+target_link_libraries(CWaypoint PRIVATE cwaypoint_core PkgConfig::RAYLIB)
+target_compile_options(CWaypoint PRIVATE -Wall -Wextra -Wpedantic)
+set_target_properties(CWaypoint PROPERTIES MACOSX_BUNDLE_GUI_IDENTIFIER "ie.cwaypoint.learning" MACOSX_BUNDLE_BUNDLE_NAME "CWaypoint" MACOSX_BUNDLE_SHORT_VERSION_STRING "0.1.0" BUILD_RPATH "@executable_path/../Frameworks")
+if(APPLE)
+ find_library(RAYLIB_DYLIB NAMES raylib PATHS ${RAYLIB_LIBRARY_DIRS} NO_DEFAULT_PATH REQUIRED)
+ execute_process(COMMAND otool -D "${RAYLIB_DYLIB}" OUTPUT_VARIABLE RAYLIB_ID_OUTPUT COMMAND_ERROR_IS_FATAL ANY)
+ string(REGEX REPLACE "^[^\n]*\n[ \t]*([^\n]+).*" "\\1" RAYLIB_INSTALL_ID "${RAYLIB_ID_OUTPUT}")
+ string(STRIP "${RAYLIB_INSTALL_ID}" RAYLIB_INSTALL_ID)
+ get_filename_component(RAYLIB_BUNDLE_NAME "${RAYLIB_INSTALL_ID}" NAME)
+ add_custom_command(TARGET CWaypoint POST_BUILD
+ COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_BUNDLE_DIR:CWaypoint>/Contents/Frameworks"
+ COMMAND ${CMAKE_COMMAND} -E copy "${RAYLIB_DYLIB}" "$<TARGET_BUNDLE_DIR:CWaypoint>/Contents/Frameworks/${RAYLIB_BUNDLE_NAME}"
+ COMMAND install_name_tool -change "${RAYLIB_INSTALL_ID}" "@executable_path/../Frameworks/${RAYLIB_BUNDLE_NAME}" "$<TARGET_FILE:CWaypoint>"
+ COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_BUNDLE_DIR:CWaypoint>/Contents/Resources"
+ COMMAND ${CMAKE_COMMAND} -E copy "${CMAKE_SOURCE_DIR}/THIRD_PARTY_NOTICES.txt" "$<TARGET_BUNDLE_DIR:CWaypoint>/Contents/Resources/THIRD_PARTY_NOTICES.txt"
+ COMMAND codesign --force --deep --sign - "$<TARGET_BUNDLE_DIR:CWaypoint>"
+ VERBATIM)
+endif()
+enable_testing()
+add_executable(core_tests tests/core_tests.cpp)
+target_link_libraries(core_tests PRIVATE cwaypoint_core)
+add_test(NAME learning_and_storage COMMAND core_tests)
+add_executable(text_input_tests tests/text_input_tests.cpp src/text_input.cpp)
+target_include_directories(text_input_tests PRIVATE src)
+add_test(NAME answer_editing COMMAND text_input_tests)
