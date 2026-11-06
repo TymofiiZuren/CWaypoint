@@ -62,3 +62,7 @@ Default progress location: `~/Library/Application Support/CWaypoint`. Use `--dat
 ## Integration
 
 `src/core.hpp` defines the lesson, question, walkthrough, evaluation and profile contracts. `src/sample_content.cpp` contains the replaceable starter records. Oleksandr can extend the catalogue and evaluator without changing screen-specific correctness logic. See [docs/content-contracts.md](docs/content-contracts.md).
+
+## Oleksandr's first learning core
+
+The first authored C variables lesson and evaluator are also available as a standalone C++17 handoff in `src/learning/`. Run `make test` to verify that evaluator and compile-check its C example; run `make demo` for a terminal demonstration. See [integration notes](docs/integration.md) and [Friday record](docs/friday-2026-11-06.md). The raylib app currently uses the starter catalogue in `src/sample_content.cpp`; adapting this separate handoff into that catalogue is follow-up integration work.

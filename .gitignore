@@ -1,8 +1,8 @@
-# Build output
-/build/
+# Build outputs (including the standalone lesson harness)
+build/
 /cmake-build-*/
 
-# Local scratch files
+# Local scratch artifacts
 /.scratch/
 
 # Local secrets
