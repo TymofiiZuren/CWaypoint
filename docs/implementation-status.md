@@ -2,7 +2,7 @@
 
 ## Delivered
 
-`build/CWaypoint.app` is a runnable Apple Silicon macOS application. `build/CWaypoint-macOS-arm64.zip` contains the same app with its embedded raylib library and license notice. Application source is in `src/`; CMake builds the executable and headless core tests. No package downloads, new production dependencies, Git commits, pushes or hosted automation were added.
+`build/CWaypoint.app` is a runnable Apple Silicon macOS application. `build/CWaypoint-macOS-arm64.zip` contains the same app with its embedded raylib library and license notice. Application source is in `src/`; CMake builds the executable and headless core tests. No package downloads, new production dependencies or hosted automation were added.
 
 The user-owned implementation includes Home/Continue, separate C and C++ catalogue filters, lesson Read/Practice/Fresh check/Summary, feedback and retries, progress and mistake review, walkthrough player, comparisons, text-size settings, focus outlines, keyboard navigation, vertical/code scrolling, save notices and explicit reset confirmation. Three starter lessons, nine questions and 27 local hint levels make the app usable before the full curriculum arrives.
 
