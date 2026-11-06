@@ -1,1 +1,14 @@
+# Build outputs (including the standalone lesson harness)
 build/
+/cmake-build-*/
+
+# Local scratch artifacts
+/.scratch/
+
+# Local secrets
+.env
+.env.*
+!.env.example
+
+# macOS
+.DS_Store

@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-06T12:33:59.539540+00:00",
+  "title": "Design System: CWaypoint",
+  "extensions": {
+    "shadows": [],
+    "motion": [],
+    "breakpoints": [],
+    "native": {
+      "source": "src/main.cpp",
+      "renderer": "raylib",
+      "previewCaveat": "HTML/CSS previews are not applicable: the production renderer uses native raylib drawing. Refer to native screenshot evidence under .scratch/final-captures and .scratch/compact-captures.",
+      "roundness": {
+        "button": 0.16,
+        "input": 0.12,
+        "code": 0.08
+      },
+      "cornerSegments": 8,
+      "window": {
+        "initial": [
+          1280,
+          840
+        ],
+        "minimum": [
+          960,
+          640
+        ]
+      },
+      "railWidth": 224,
+      "contentWidth": "min(900, windowWidth - 304)",
+      "accessibility": "Custom controls are not exposed to VoiceOver."
+    }
+  },
+  "components": [],
+  "narrative": {
+    "northStar": "The Learning Workspace",
+    "overview": "Preserve the approved light desktop interface: neutral surfaces, restrained blue actions, fixed navigation and persistent save feedback. The interface supports reading and deliberate practice through clear text and a predictable workspace. This is the existing visual direction, not a new identity.",
+    "keyCharacteristics": [
+      "Light, flat surfaces with blue actions and visible keyboard focus.",
+      "A stable navigation rail around a vertically scrolling learning workspace.",
+      "Readable prose and monospace examples with explicit learning and save states."
+    ],
+    "rules": [
+      {
+        "name": "The State Has Words Rule",
+        "body": "Keep textual feedback alongside state colors, including saved-progress failures and learning results.",
+        "section": "colors"
+      }
+    ],
+    "dos": [
+      "Do preserve the light neutral surfaces, blue actions and stable workspace.",
+      "Do keep keyboard focus and textual learning/save states visible.",
+      "Do distinguish practice completion from independent first-attempt evidence."
+    ],
+    "donts": [
+      "Don't imply that one correct question proves mastery.",
+      "Don't let optional AI configuration block authored offline learning.",
+      "Don't describe these custom controls as native accessible text fields or browser components."
+    ]
+  }
+}
