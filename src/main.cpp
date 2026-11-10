@@ -65,6 +65,7 @@ struct UI {
   std::string reviewTrack;
   std::string automaticAction;
   bool actionUsed = false;
+  bool pointerHitTest = false;
   UI(const std::vector<Lesson> &l, Store &s, Controller &a)
       : lessons(l), store(s), app(a) {
     for (const auto &item : l)
@@ -138,12 +139,13 @@ struct UI {
     if(menuOpen && inCoursePanels) return false;
     if(assistantBody && (point.y < assistantTop || point.y >= assistantBottom)) return false;
     if(moduleBody && (point.y < moduleTop || point.y >= moduleBottom)) return false;
-    if (inContent && screen == Screen::Lesson &&
-        (point.x < courseLayout(GetScreenWidth()).materialX ||
-         point.x >= courseLayout(GetScreenWidth()).assistantX - 16)) return false;
-    if (inContent &&
-        (!contentHit(workspaceLayout(GetScreenWidth(), GetScreenHeight()), point.x, point.y) || menuOpen))
-      return false;
+    if (inContent) {
+      if (menuOpen) return false;
+      const bool inViewport = screen == Screen::Lesson
+          ? courseMaterialHit(courseLayout(GetScreenWidth()), GetScreenHeight(), point.x, point.y)
+          : contentHit(workspaceLayout(GetScreenWidth(), GetScreenHeight()), point.x, point.y);
+      if (!inViewport) return false;
+    }
     return CheckCollisionPointRec(point, r);
   }
   bool visible(Rectangle r) {
@@ -154,7 +156,9 @@ struct UI {
     int id = -1;
     if (enabled)
       id = widgets++;
-    bool hot = enabled && visible(r) && hit(r, GetMousePosition());
+    const bool injectedPointer = pointerHitTest && automaticAction == label && !actionUsed;
+    const Vector2 pointer = injectedPointer ? Vector2{r.x+r.width/2,r.y+r.height/2} : GetMousePosition();
+    bool hot = enabled && visible(r) && hit(r, pointer);
     bool selected = enabled && id == focus;
     Color bg = primary ? blue : surface;
     if (hot)
@@ -190,11 +194,11 @@ struct UI {
          !enabled  ? muted
          : primary ? paper
                    : ink);
-    bool clicked = hot && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
+    bool clicked = hot && (injectedPointer || IsMouseButtonPressed(MOUSE_BUTTON_LEFT));
     bool key = enabled && !((inContent || inCoursePanels) && menuOpen) && !actionUsed && selected &&
                (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) &&
                !answerFocus;
-    bool scripted = enabled && !automaticAction.empty() &&
+    bool scripted = !pointerHitTest && enabled && !automaticAction.empty() &&
                     automaticAction == label && !actionUsed &&
                     (automaticScope.empty() || automaticScope == currentScope);
     if (clicked) {
@@ -1371,13 +1375,14 @@ int main(int argc, char **argv) {
   try {
     std::filesystem::path profile = defaultProfile(), capture;
     bool smoke = false, guided = false, reviewTest = false, codeTest = false,
-         undoTest = false, authoredTest = false, courseTest = false, conditionsTest = false;
+         undoTest = false, authoredTest = false, courseTest = false, conditionsTest = false, pointerTest = false;
     int frames = 0;
     bool compact = false, largeText = false;
     std::string resumeTest;
     std::string initial = "home";
     for (int i = 1; i < argc; i++) {
       std::string arg = argv[i];
+      if (arg == "--pointer-test") { smoke=true; pointerTest=true; continue; }
       if (arg == "--conditions-test") { smoke=true; conditionsTest=true; continue; }
       if (arg == "--course-test") { smoke=true; courseTest=true; continue; }
       if (arg == "--authored-test") {
@@ -1418,7 +1423,7 @@ int main(int argc, char **argv) {
         std::cout
             << "CWaypoint [--data-dir PATH] [--capture-dir PATH] [--screen "
                "home|lesson|review|settings|progress|compare] "
-               "[--course-test|--smoke-test|--guided-test|--review-test|--code-test|--undo-test|--authored-test] "
+               "[--pointer-test|--course-test|--smoke-test|--guided-test|--review-test|--code-test|--undo-test|--authored-test] "
                "[--resume-test "
                "seed|question|walk-seed|walk]\n";
         return 0;
@@ -1456,7 +1461,7 @@ int main(int argc, char **argv) {
     SetTraceLogLevel(LOG_WARNING);
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_WINDOW_HIGHDPI |
                    FLAG_MSAA_4X_HINT);
-    InitWindow(compact ? 960 : 1280, compact ? 640 : 840,
+    InitWindow(pointerTest ? 2036 : compact ? 960 : 1280, pointerTest ? 1000 : compact ? 640 : 840,
                "CWaypoint - Learn C and C++");
     if (!IsWindowReady())
       throw std::runtime_error("Unable to initialize the application window.");
@@ -1464,6 +1469,7 @@ int main(int argc, char **argv) {
     SetTargetFPS(60);
     SetExitKey(KEY_NULL);
     UI ui(lessons, store, controller);
+    ui.pointerHitTest = pointerTest;
     Image fire = LoadImageFromMemory(".png", streakFirePng, sizeof(streakFirePng));
     ImageFormat(&fire, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
     ui.streakFire = LoadTextureFromImage(fire);
@@ -1604,6 +1610,11 @@ int main(int argc, char **argv) {
       actions={"Lessons","Open C course","Module: Conditions: if and else", "Start practice",
                "Pass","Check answer","Next practice question","Enter answer: Retry","Check answer",
                "Try the fresh check","Enter answer: closed","Check answer","View summary"};
+    if(pointerTest)
+      actions={"Lessons","Open C course","Start practice","Enter answer: 5","Check answer",
+               "Next practice question","Enter answer: int","Check answer","Summary",
+               "All courses","Open C++ course","Practice","Enter answer: Hi Ada","Check answer",
+               "Settings","Preferences","Home"};
     RenderTexture2D captureTarget{};
     if (!capture.empty())
       captureTarget = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
@@ -1635,12 +1646,12 @@ int main(int argc, char **argv) {
         ui.automaticAction = actions[action];
       else
         ui.automaticAction.clear();
-      if (smoke && !guided && !reviewTest && !codeTest && !undoTest && !authoredTest && !courseTest && !conditionsTest &&
+      if (smoke && !guided && !reviewTest && !codeTest && !undoTest && !authoredTest && !courseTest && !conditionsTest && !pointerTest &&
           resumeTest.empty() && action == 1 && !ui.automaticAction.empty()) {
         ui.scroll = std::min(80.f, ui.maxScroll);
         expectedCatalogueScroll = ui.scroll;
       }
-      if (smoke && !guided && !reviewTest && !codeTest && !undoTest && !authoredTest && !courseTest && !conditionsTest &&
+      if (smoke && !guided && !reviewTest && !codeTest && !undoTest && !authoredTest && !courseTest && !conditionsTest && !pointerTest &&
           resumeTest.empty() && action == 6 && !ui.automaticAction.empty()) {
         ui.draft().set("inx");
         ui.draft().moveTo(2);
@@ -1757,7 +1768,7 @@ int main(int argc, char **argv) {
         }
       }
       if (smoke && action == actions.size() && pendingCapture.empty()) {
-        if (!guided && !reviewTest && !codeTest && !undoTest && !authoredTest && !courseTest && !conditionsTest &&
+        if (!guided && !reviewTest && !codeTest && !undoTest && !authoredTest && !courseTest && !conditionsTest && !pointerTest &&
             resumeTest.empty())
           testOk = controller.completed(0) == 1 &&
                    controller.profile.evidence.at("c-var-p2").helped &&
@@ -1767,6 +1778,9 @@ int main(int argc, char **argv) {
                    ui.drafts.at("c-var-p2").value() == "int" &&
                    ui.practicePosition.at("c-variables") == 1 &&
                    std::abs(ui.scroll - expectedCatalogueScroll) < 1;
+        if(pointerTest)
+          testOk=GetScreenWidth()>=1600 && controller.completed(0)==2 &&
+            controller.solved(1,0) && ui.screen==Screen::Home && !ui.menuOpen;
         if(conditionsTest)
           testOk=controller.completed(3)==2 && controller.solved(3,2) &&
             controller.status(3,2)=="Solved independently on first attempt" &&

@@ -22,6 +22,10 @@ inline CourseLayout courseLayout(int w) {
   float assistantX = static_cast<float>(w) - 16 - right;
   return {16, left, materialX, assistantX - 16 - materialX, assistantX, right};
 }
+inline bool courseMaterialHit(const CourseLayout &c, int height, float x, float y) {
+  return x >= c.materialX && x < c.assistantX - 16 &&
+         y >= 88 && y < height - 48;
+}
 inline bool contentHit(const WorkspaceLayout &l, float x, float y) {
   return x >= l.x - 16 && x < l.x + l.width + 16 &&
          y >= 88 && y < l.bottom;

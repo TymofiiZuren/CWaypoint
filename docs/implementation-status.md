@@ -124,3 +124,11 @@ Four CTest suites and make test passed after integration. Added explicit version
 The three-hour development journal for Tymofii is under docs/journals, with Markdown source and a visually verified Word copy matching the earlier journal format. Hours are self-reported, not measured. Older untracked 6 November journal files were left outside the delivery commits.
 
 Final delivery verification: all twelve isolated combined executable runs passed (course standard/compact, conditions compact, smoke, guided, review, code, undo and four resume phases). Both app and extracted-app signatures verified. The feature branch contains the partner merge and the tracked three-hour Word/Markdown journal; latest-base ancestry and normal-push ancestry were checked before publication.
+
+## Wide-window button hit testing — 10 November 2026
+
+User-reported unresponsive buttons were reproduced at a 2036-logical-pixel window width. The material panel is laid out across the course workspace, but UI::hit additionally intersected it with the centred, capped catalogue viewport. This excluded visible left-aligned course controls such as Start practice and Check answer on wide windows. The shared hit test now selects the active screen's owning viewport, retaining header/footer, menu and side-panel exclusions.
+
+The new --pointer-test injects a coordinate at each rendered button centre through the normal visibility, clipping and click path, rather than using label-based activation. Before the fix it failed at Start practice; after the fix it completed both-track practice, next-question navigation and the settings menu. Geometry tests cover 960, 1280, 1600, 2036 and 2560 widths and reject side-panel/header/footer hits. Release build, all four CTest suites, the coordinate regression and the twelve existing isolated executable journeys passed. The refreshed packaged copy passed the coordinate journey from /tmp; both signatures and git diff --check passed.
+
+Primary signal is met for the reproduced coordinate/clipping failure. Physical OS clicking remains partially validated: the native window screenshot was available, but the automation click call returned noWindowsAvailable. Running instances must be restarted to load the rebuilt executable. No learning, persistence or theme semantics changed.
