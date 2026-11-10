@@ -10,12 +10,77 @@ void check(bool ok, const char *s) {
     throw std::runtime_error(s);
 }
 int main() {
+  check(studyStreak({}, 100) == 0, "empty streak");
+  check(studyStreak({98, 99, 100}, 100) == 3, "consecutive days");
+  check(studyStreak({98, 99}, 100) == 2, "today still available");
+  check(studyStreak({98}, 100) == 0, "missed day expires streak");
+  check(studyStreak({98, 100, 101}, 100) == 1, "gap and future day");
+  auto activityRoot = std::filesystem::temp_directory_path() /
+      ("cwaypoint-activity-" + std::to_string(getpid()));
+  {
+    Store store(activityRoot);
+    auto lessons = sampleLessons();
+    Controller controller(lessons, store);
+    controller.submit(0, 0, "incorrect");
+    check(controller.profile.studyDays.empty(), "wrong answer earns no activity");
+    controller.retry();
+    controller.submit(0, 0, lessons[0].questions[0].answer);
+    controller.retry();
+    controller.submit(0, 0, lessons[0].questions[0].answer);
+    check(controller.profile.studyDays.size() == 1, "same day counted once");
+  }
+  {
+    Store store(activityRoot);
+    auto profile = store.load();
+    check(profile.studyDays.count(localStudyDay()) == 1, "activity restored");
+    check(store.reset(profile) && profile.studyDays.empty(), "reset clears activity");
+  }
+  std::filesystem::remove_all(activityRoot);
+
   auto dir = std::filesystem::temp_directory_path() /
              ("cwaypoint-test-" + std::to_string(getpid()));
   std::filesystem::create_directories(dir);
   try {
     auto lessons = sampleLessons();
     check(validate(lessons).empty(), "sample contract");
+    {
+      const auto legacyTwo = dir / "version-two";
+      std::filesystem::create_directories(legacyTwo);
+      { std::ofstream f(legacyTwo / "manifest"); f << "CWAYPOINT 1 1\n"; }
+      { std::ofstream f(legacyTwo / "generation-1.save");
+        f << "CWPROFILE 2 1\n\"c-variables\" 1 18 0 1\n\"c-var-p1\" "
+          << lessons[0].revision << " 1 1 0 1 1 0\nRESUME 1 0 "
+          << lessons[0].revision << "\nEND\n";
+      }
+      Store store(legacyTwo);
+      auto profile = store.load();
+      check(profile.studyDays.empty() && profile.evidence.at("c-var-p1").solved &&
+            profile.question == 1, "version two loads without invented activity");
+      profile.studyDays.insert(localStudyDay());
+      check(store.save(profile), "version two upgrades to activity format");
+      auto restored = store.load();
+      check(restored.studyDays.count(localStudyDay()) && restored.question == 1,
+            "version three retains legacy progress and new activity");
+      std::ifstream backup(legacyTwo / "generation-1.save.bak");
+      std::string magic; int version=0; backup >> magic >> version;
+      check(version == 2, "version two backup retained after upgrade");
+    }
+    int activityCase=0;
+    for(const std::string &activity : {"ACTIVITY 2 100 100", "ACTIVITY 1 -1",
+         "ACTIVITY 1 100001", "ACTIVITY 50001", "ACTIVITY 1"}) {
+      const auto invalid = dir / ("invalid-activity-" + std::to_string(activityCase++));
+      std::filesystem::create_directories(invalid);
+      { std::ofstream f(invalid / "manifest"); f << "CWAYPOINT 1 1\n"; }
+      const std::string original="CWPROFILE 3 1\n\"\" 0 18 0 0\nRESUME 0 0 0\n" + activity + "\nEND\n";
+      { std::ofstream f(invalid / "generation-1.save"); f << original; }
+      Store store(invalid);
+      auto profile=store.load();
+      check(!store.writable() && profile.studyDays.empty(), "invalid activity stays preserved and read only");
+      std::ifstream f(invalid / "generation-1.save");
+      const std::string retained((std::istreambuf_iterator<char>(f)), {});
+      check(retained == original, "invalid activity file remains byte unchanged");
+    }
+
     check(validateWalkthrough(lessons[0].steps).empty(), "valid walkthrough");
     auto brokenSteps = lessons[0].steps;
     brokenSteps[0].state.clear();

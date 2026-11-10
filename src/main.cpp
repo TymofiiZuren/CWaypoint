@@ -1,4 +1,5 @@
 #include "core.hpp"
+#include "streak_icon.hpp"
 #include "learning/lesson.hpp"
 #include "text_input.hpp"
 #include "ui_layout.hpp"
@@ -28,6 +29,7 @@ enum class Screen {
 };
 struct UI {
   Font font{}, mono{};
+  Texture2D streakFire{}, streakInactive{};
   Screen screen = Screen::Home;
   const std::vector<Lesson> &lessons;
   Store &store;
@@ -51,6 +53,9 @@ struct UI {
   std::map<std::string, float> codeOffsets, assistantScroll;
   std::string currentScope, automaticScope, copiedCode, copiedText;
   double copiedUntil = 0;
+  bool revealModule = true, moduleBody = false;
+  float moduleTop = 0, moduleBottom = 0;
+  std::map<std::string, float> moduleScroll;
   bool inCoursePanels = false;
   std::string assistantKey;
   bool assistantBody = false;
@@ -132,6 +137,7 @@ struct UI {
   bool hit(Rectangle r, Vector2 point) {
     if(menuOpen && inCoursePanels) return false;
     if(assistantBody && (point.y < assistantTop || point.y >= assistantBottom)) return false;
+    if(moduleBody && (point.y < moduleTop || point.y >= moduleBottom)) return false;
     if (inContent && screen == Screen::Lesson &&
         (point.x < courseLayout(GetScreenWidth()).materialX ||
          point.x >= courseLayout(GetScreenWidth()).assistantX - 16)) return false;
@@ -158,6 +164,11 @@ struct UI {
     DrawRectangleRounded(r, 0.16f, 8, bg);
     if (!primary && hot)
       DrawRectangleRoundedLinesEx(r, 0.16f, 8, 1, line);
+    if(selected && tabbing && moduleBody) {
+      auto &position=moduleScroll[lessons[lesson].track];
+      if(r.y<moduleTop) position=std::max(0.f,position+r.y-moduleTop);
+      else if(r.y+r.height>moduleBottom) position+=r.y+r.height-moduleBottom;
+    }
     if(selected && tabbing && assistantBody) {
       auto &position=assistantScroll[assistantKey];
       if(r.y < assistantTop) position=std::max(0.f,position+r.y-assistantTop);
@@ -231,6 +242,7 @@ struct UI {
   }
   void savePosition() { app.resume(lesson, stage, question, walk); }
   void openLesson(int l, int st = 0, bool restore = false) {
+    revealModule = true;
     lesson = l;
     stage = st;
     question = st == 2 ? 2 : st == 1 ? practicePosition[lessons[l].id] : 0;
@@ -588,14 +600,32 @@ struct UI {
         (n.target == Screen::Catalogue && screen == Screen::Lesson && !reviewMode) ||
         (n.target == Screen::Review && reviewMode);
       // Keep action identity independent of the shorter navigation label.
-      if (button(n.label, {nx, 18, 132, 44}, false, true, false))
+      if (button(n.label, {nx, 18, 116, 44}, false, true, false))
         go(n.target);
-      DrawRectangleRounded({nx,18,132,44}, .25f, 8, selected ? pale : surface);
+      DrawRectangleRounded({nx,18,116,44}, .25f, 8, selected ? pale : surface);
       text(n.display, nx + 16, 32, 17, selected ? blue : muted);
       if (selected) DrawRectangle(nx + 16, 65, 34, 2, blue);
       if (tabbing && focus == widgets - 1)
-        DrawRectangleRoundedLinesEx({nx,18,132,44}, .25f, 8, 2, blue);
-      nx += 140;
+        DrawRectangleRoundedLinesEx({nx,18,116,44}, .25f, 8, 2, blue);
+      nx += 124;
+    }
+    const int days = studyStreak(app.profile.studyDays, localStudyDay());
+    const int level = days >= 14 ? 4 : days >= 7 ? 3 : days >= 3 ? 2 : 1;
+    const float badgeX = GetScreenWidth() - 184;
+    const Rectangle badge{badgeX, 20, 88, 40};
+    DrawRectangleRounded(badge, .3f, 12, raised);
+    const float iconSize = 24.f + (days ? level : 0);
+    if (days)
+      DrawCircleGradient({badgeX + 24, 40}, 15 + level,
+                         Fade(ORANGE, .08f * level), Fade(ORANGE, 0));
+    DrawTexturePro(days ? streakFire : streakInactive, {0, 0, 72, 72},
+                   {badgeX + 10, 40 - iconSize / 2, iconSize, iconSize},
+                   {0, 0}, 0, WHITE);
+    text(std::to_string(days), badgeX + 49, 30, 20, days ? ink : muted);
+    if (CheckCollisionPointRec(GetMousePosition(), badge)) {
+      DrawRectangle(GetScreenWidth()-370,72,346,32,raised);
+      text(std::to_string(days) + "-day streak. Solve one question today.",
+           GetScreenWidth()-360,80,14,ink);
     }
     Rectangle gear{static_cast<float>(GetScreenWidth() - 72),18,48,44};
     if (button("Settings", gear, false, true, false)) {
@@ -789,6 +819,15 @@ struct UI {
     x = geometry.moduleX+12; y = 116; width = geometry.moduleWidth-24;
     text(current.track + " COURSE", x, y, 14, blue); y += 30;
     heading("Modules");
+    moduleTop=y; moduleBottom=GetScreenHeight()-124.f;
+    auto &modulePosition=moduleScroll[current.track];
+    if(!menuOpen && GetMouseX()>=geometry.moduleX && GetMouseX()<geometry.moduleX+geometry.moduleWidth &&
+       GetMouseY()>=moduleTop && GetMouseY()<moduleBottom)
+      modulePosition=std::max(0.f,modulePosition-GetMouseWheelMove()*40);
+    EndScissorMode();
+    BeginScissorMode(static_cast<int>(x),static_cast<int>(moduleTop),static_cast<int>(width),
+                     static_cast<int>(moduleBottom-moduleTop));
+    moduleBody=true; y-=modulePosition;
     int number = 0;
     for (int i=0; i<static_cast<int>(lessons.size()); ++i) {
       if(lessons[i].track != current.track) continue;
@@ -798,6 +837,11 @@ struct UI {
       float height = 40 + rows.size()*22;
       Rectangle r{x,y,width,height};
       bool selected = i == lesson;
+      if(selected && revealModule) {
+        if(r.y<moduleTop) modulePosition=std::max(0.f,modulePosition+r.y-moduleTop);
+        else if(r.y+r.height>moduleBottom) modulePosition+=r.y+r.height-moduleBottom;
+        revealModule=false;
+      }
       if(button(key,r,false,true,false)) { openLesson(i); }
       if(selected) DrawRectangleRounded(r,.15f,8,pale);
       if(selected) DrawRectangleRec({x,y+8,3,height-16},blue);
@@ -809,6 +853,10 @@ struct UI {
       text(std::to_string(app.completed(i)) + " / 2 practice",x+10,y-8,13,muted);
       y += 24;
     }
+    modulePosition=std::min(modulePosition,std::max(0.f,y+modulePosition-moduleBottom));
+    moduleBody=false;
+    EndScissorMode(); contentClip();
+    y=GetScreenHeight()-112.f;
     if(rowButton("All courses",false,true,width)) go(Screen::Catalogue);
     panel({geometry.assistantX,96,geometry.assistantWidth,
            static_cast<float>(GetScreenHeight()-156)});
@@ -1007,6 +1055,7 @@ struct UI {
       heading(q.prompt);
       code(questionCode, l.id + ":example", "Question code", true);
       if (q.type == QuestionType::Choice) {
+        paragraph("Choose one answer, then select Check answer.",muted,16);
         for (const auto &choice : q.choices) {
           bool selected = draft().value() == choice;
           if (rowButton((selected ? "Selected: " : "") + choice, selected)) {
@@ -1237,6 +1286,7 @@ struct UI {
           codeOffsets.clear();
           conversations.clear();
           assistantScroll.clear();
+          moduleScroll.clear();
           chatDraft.set("");
         }
         resetConfirm = false;
@@ -1321,13 +1371,14 @@ int main(int argc, char **argv) {
   try {
     std::filesystem::path profile = defaultProfile(), capture;
     bool smoke = false, guided = false, reviewTest = false, codeTest = false,
-         undoTest = false, authoredTest = false, courseTest = false;
+         undoTest = false, authoredTest = false, courseTest = false, conditionsTest = false;
     int frames = 0;
     bool compact = false, largeText = false;
     std::string resumeTest;
     std::string initial = "home";
     for (int i = 1; i < argc; i++) {
       std::string arg = argv[i];
+      if (arg == "--conditions-test") { smoke=true; conditionsTest=true; continue; }
       if (arg == "--course-test") { smoke=true; courseTest=true; continue; }
       if (arg == "--authored-test") {
         smoke = true;
@@ -1413,6 +1464,16 @@ int main(int argc, char **argv) {
     SetTargetFPS(60);
     SetExitKey(KEY_NULL);
     UI ui(lessons, store, controller);
+    Image fire = LoadImageFromMemory(".png", streakFirePng, sizeof(streakFirePng));
+    ImageFormat(&fire, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
+    ui.streakFire = LoadTextureFromImage(fire);
+    ImageColorTint(&fire, Color{160, 160, 160, 140});
+    ImageFormat(&fire, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
+    ui.streakInactive = LoadTextureFromImage(fire);
+    UnloadImage(fire);
+    SetTextureFilter(ui.streakFire, TEXTURE_FILTER_BILINEAR);
+    SetTextureFilter(ui.streakInactive, TEXTURE_FILTER_BILINEAR);
+
     ui.font = LoadFontEx("/System/Library/Fonts/Supplemental/Arial.ttf", 48,
                          nullptr, 0);
     ui.mono = LoadFontEx("/System/Library/Fonts/Supplemental/Andale Mono.ttf",
@@ -1539,6 +1600,10 @@ int main(int argc, char **argv) {
                "Start practice","Chat: Help me understand assignment","Send",
                "Settings","Preferences","Reset progress...","Confirm reset",
                "Lessons","Open C course","Start practice"};
+    if(conditionsTest)
+      actions={"Lessons","Open C course","Module: Conditions: if and else", "Start practice",
+               "Pass","Check answer","Next practice question","Enter answer: Retry","Check answer",
+               "Try the fresh check","Enter answer: closed","Check answer","View summary"};
     RenderTexture2D captureTarget{};
     if (!capture.empty())
       captureTarget = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
@@ -1570,12 +1635,12 @@ int main(int argc, char **argv) {
         ui.automaticAction = actions[action];
       else
         ui.automaticAction.clear();
-      if (smoke && !guided && !reviewTest && !codeTest && !undoTest && !authoredTest && !courseTest &&
+      if (smoke && !guided && !reviewTest && !codeTest && !undoTest && !authoredTest && !courseTest && !conditionsTest &&
           resumeTest.empty() && action == 1 && !ui.automaticAction.empty()) {
         ui.scroll = std::min(80.f, ui.maxScroll);
         expectedCatalogueScroll = ui.scroll;
       }
-      if (smoke && !guided && !reviewTest && !codeTest && !undoTest && !authoredTest && !courseTest &&
+      if (smoke && !guided && !reviewTest && !codeTest && !undoTest && !authoredTest && !courseTest && !conditionsTest &&
           resumeTest.empty() && action == 6 && !ui.automaticAction.empty()) {
         ui.draft().set("inx");
         ui.draft().moveTo(2);
@@ -1692,7 +1757,7 @@ int main(int argc, char **argv) {
         }
       }
       if (smoke && action == actions.size() && pendingCapture.empty()) {
-        if (!guided && !reviewTest && !codeTest && !undoTest && !authoredTest && !courseTest &&
+        if (!guided && !reviewTest && !codeTest && !undoTest && !authoredTest && !courseTest && !conditionsTest &&
             resumeTest.empty())
           testOk = controller.completed(0) == 1 &&
                    controller.profile.evidence.at("c-var-p2").helped &&
@@ -1702,6 +1767,10 @@ int main(int argc, char **argv) {
                    ui.drafts.at("c-var-p2").value() == "int" &&
                    ui.practicePosition.at("c-variables") == 1 &&
                    std::abs(ui.scroll - expectedCatalogueScroll) < 1;
+        if(conditionsTest)
+          testOk=controller.completed(3)==2 && controller.solved(3,2) &&
+            controller.status(3,2)=="Solved independently on first attempt" &&
+            controller.profile.studyDays.count(localStudyDay())==1 && ui.stage==3;
         if(courseTest)
           testOk=courseAssistanceOk && ui.conversations.empty() &&
             ui.chatDraft.value().empty() && !controller.profile.evidence.count("c-var-p1") &&
@@ -1717,7 +1786,7 @@ int main(int argc, char **argv) {
         if (guided)
           testOk = controller.completed(0) == 2 &&
                    controller.completed(2) == 2 &&
-                   controller.nextLesson("C") == -1 &&
+                   controller.nextLesson("C") == 3 &&
                    controller.nextLesson("C++") == 1 &&
                    controller.status(0, 2) ==
                        "Solved independently on first attempt" &&
@@ -1768,6 +1837,8 @@ int main(int argc, char **argv) {
     }
     if (!capture.empty())
       UnloadRenderTexture(captureTarget);
+    UnloadTexture(ui.streakFire);
+    UnloadTexture(ui.streakInactive);
     if (ownMono)
       UnloadFont(ui.mono);
     if (ownFont)

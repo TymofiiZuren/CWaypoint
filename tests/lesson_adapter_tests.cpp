@@ -46,7 +46,7 @@ int main() {
   rejects([](auto &l){l.exercises[0].type=cwaypoint::ExerciseType::SingleChoice;});
   rejects([](auto &l){l.exercises[0].type=cwaypoint::ExerciseType::FillToken;});
   auto catalogue=sampleLessons();
-  require(catalogue[0].body==source.explanation && catalogue[0].revision==2 && catalogue.size()==3, "catalogue uses authored source");
+  require(catalogue[0].body==source.explanation && catalogue[0].revision==2 && catalogue.size()==4, "catalogue uses authored source");
   auto path=std::filesystem::temp_directory_path()/("cw-adapter-"+std::to_string(getpid()));
   auto old=catalogue; old[0].revision=1;
   { Store store(path); Controller c(old,store);

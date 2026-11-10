@@ -1,6 +1,7 @@
 #include "core.hpp"
 #include <algorithm>
 #include <cerrno>
+#include <ctime>
 #include <fcntl.h>
 #include <fstream>
 #include <iomanip>
@@ -8,6 +9,23 @@
 #include <sys/file.h>
 #include <unistd.h>
 namespace cw {
+// Use the learner's local calendar date, encoded independently of DST.
+int localStudyDay() {
+  std::time_t now = std::time(nullptr);
+  std::tm date{};
+  localtime_r(&now, &date);
+  date.tm_hour = date.tm_min = date.tm_sec = 0;
+  return static_cast<int>(timegm(&date) / 86400);
+}
+int studyStreak(const std::set<int>& days, int today) {
+  int end = days.count(today) ? today : today - 1;
+  int streak = 0;
+  while (days.count(end)) {
+    ++streak;
+    --end;
+  }
+  return streak;
+}
 namespace {
 std::string trim(std::string s) {
   auto a = s.find_first_not_of(" \t\r\n");
@@ -171,7 +189,7 @@ bool Store::readSnapshot(const std::filesystem::path &p, Profile &result) {
   int version;
   size_t count;
   if (!(f >> magic >> version >> gen) || magic != "CWPROFILE" ||
-      (version != 1 && version != 2) || gen != generation)
+      (version != 1 && version != 2 && version != 3) || gen != generation)
     return false;
   if (!(f >> std::quoted(v.lesson) >> v.step >> v.textSize >> v.recovered >>
         count) ||
@@ -192,7 +210,7 @@ bool Store::readSnapshot(const std::filesystem::path &p, Profile &result) {
     if (review)
       v.review.insert(id);
   }
-  if (version == 2) {
+  if (version >= 2) {
     std::string tag;
     if (!(f >> tag >> v.question >> v.walkthrough >> v.resumeRevision) ||
         tag != "RESUME" || v.question < 0 || v.question > 2 ||
@@ -203,6 +221,17 @@ bool Store::readSnapshot(const std::filesystem::path &p, Profile &result) {
       return false;
   } else
     v.question = v.step == 2 ? 2 : 0;
+  if (version >= 3) {
+    std::string tag;
+    size_t days;
+    if (!(f >> tag >> days) || tag != "ACTIVITY" || days > 50000)
+      return false;
+    for (size_t i = 0; i < days; ++i) {
+      int day;
+      if (!(f >> day) || day < 0 || day > 100000 || !v.studyDays.insert(day).second)
+        return false;
+    }
+  }
   std::string end, extra;
   if (!(f >> end) || end != "END" || (f >> extra))
     return false;
@@ -227,7 +256,7 @@ Profile Store::load() {
     std::string magic;
     int version = 0;
     if (header >> magic >> version && magic == "CWPROFILE" && version != 1 &&
-        version != 2) {
+        version != 2 && version != 3) {
       canWrite = false;
       message = "This progress needs a different app version. Files preserved; "
                 "temporary practice is available.";
@@ -250,7 +279,7 @@ Profile Store::load() {
 }
 bool Store::writeSnapshot(const Profile &p) {
   std::ostringstream s;
-  s << "CWPROFILE 2 " << generation << '\n'
+  s << "CWPROFILE 3 " << generation << '\n'
     << std::quoted(p.lesson) << ' ' << p.step << ' ' << p.textSize << ' '
     << p.recovered << ' ' << p.evidence.size() << '\n';
   for (const auto &[id, e] : p.evidence)
@@ -258,7 +287,10 @@ bool Store::writeSnapshot(const Profile &p) {
       << e.issued << ' ' << e.helped << ' ' << e.solved << ' ' << e.independent
       << ' ' << p.review.count(id) << '\n';
   s << "RESUME " << p.question << ' ' << p.walkthrough << ' '
-    << p.resumeRevision << "\nEND\n";
+    << p.resumeRevision << "\nACTIVITY " << p.studyDays.size();
+  for (int day : p.studyDays)
+    s << ' ' << day;
+  s << "\nEND\n";
   auto primary = root / ("generation-" + std::to_string(generation) + ".save");
   Profile previous;
   if (readSnapshot(primary, previous)) {
@@ -418,6 +450,7 @@ Result Controller::submit(int l, int q, const std::string &a) {
   e.attempts++;
   if (r.kind == Verdict::Correct) {
     e.solved = true;
+    profile.studyDays.insert(localStudyDay());
     if (e.attempts == 1)
       e.independent = !e.helped && !profile.recovered && store.writable();
     profile.review.erase(question.id);
