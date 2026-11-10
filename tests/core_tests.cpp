@@ -183,7 +183,9 @@ int main() {
     }
     {
       std::ofstream f(legacy / "generation-1.save");
-      f << "CWPROFILE 1 1\n\"c-variables\" 1 18 0 1\n\"c-var-p1\" 1 1 1 0 1 1 "
+      // Isolate snapshot-format compatibility from assessment revision changes.
+      f << "CWPROFILE 1 1\n\"c-variables\" 1 18 0 1\n\"c-var-p1\" "
+        << lessons[0].revision << " 1 1 0 1 1 "
            "0\nEND\n";
     }
     {

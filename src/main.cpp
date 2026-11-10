@@ -1,4 +1,5 @@
 #include "core.hpp"
+#include "learning/lesson.hpp"
 #include "text_input.hpp"
 #include <algorithm>
 #include <cmath>
@@ -1122,13 +1123,18 @@ int main(int argc, char **argv) {
   try {
     std::filesystem::path profile = defaultProfile(), capture;
     bool smoke = false, guided = false, reviewTest = false, codeTest = false,
-         undoTest = false;
+         undoTest = false, authoredTest = false;
     int frames = 0;
     bool compact = false;
     std::string resumeTest;
     std::string initial = "home";
     for (int i = 1; i < argc; i++) {
       std::string arg = argv[i];
+      if (arg == "--authored-test") {
+        smoke = true;
+        authoredTest = true;
+        continue;
+      }
       if (arg == "--undo-test") {
         smoke = true;
         undoTest = true;
@@ -1160,7 +1166,7 @@ int main(int argc, char **argv) {
         std::cout
             << "CWaypoint [--data-dir PATH] [--capture-dir PATH] [--screen "
                "home|lesson|review|settings|progress|compare] "
-               "[--smoke-test|--guided-test|--review-test|--code-test] "
+               "[--smoke-test|--guided-test|--review-test|--code-test|--undo-test|--authored-test] "
                "[--resume-test "
                "seed|question|walk-seed|walk]\n";
         return 0;
@@ -1229,8 +1235,8 @@ int main(int argc, char **argv) {
     else if (initial == "compare")
       ui.go(Screen::Compare);
     std::vector<std::string> actions{
-        "Start learning", "Open Variables & values",
-        "Start practice", "5",
+        "Start learning", "Open Variables and assignment",
+        "Start practice", "Enter answer: 5",
         "Check answer",   "Next practice question",
         "1. Concept",     "Reveal answer",
         "Try again",      "Next practice question"};
@@ -1238,9 +1244,9 @@ int main(int argc, char **argv) {
     // check persisted outcomes.
     if (smoke)
       actions = {"Start learning",
-                 "Open Variables & values",
+                 "Open Variables and assignment",
                  "Start practice",
-                 "5",
+                 "Enter answer: 5",
                  "Check answer",
                  "Next practice question",
                  "1. Concept",
@@ -1259,9 +1265,9 @@ int main(int argc, char **argv) {
                  "Home",
                  "Lessons"};
     if (guided)
-      actions = {"Study Variables & values",
+      actions = {"Study Variables and assignment",
                  "Practice",
-                 "5",
+                 "Enter answer: 5",
                  "Check answer",
                  "Next practice question",
                  "Check answer",
@@ -1280,7 +1286,7 @@ int main(int argc, char **argv) {
     if (reviewTest) {
       ui.go(Screen::Review);
       actions = {"C++ only",     "All tracks",
-                 "Start review", "5",
+                 "Start review", "Enter answer: 5",
                  "Check answer", "Next review question",
                  "Check answer", "Back to review list",
                  "C++ only",     "Browse lessons",
@@ -1288,7 +1294,7 @@ int main(int argc, char **argv) {
     }
     if (!resumeTest.empty()) {
       if (resumeTest == "seed")
-        actions = {"Study Variables & values", "Start practice", "5",
+        actions = {"Study Variables and assignment", "Start practice", "Enter answer: 5",
                    "Check answer", "Next practice question"};
       else if (resumeTest == "walk-seed")
         actions = {"Continue lesson", "Read", "Next step", "Next step"};
@@ -1297,10 +1303,10 @@ int main(int argc, char **argv) {
     }
     if (codeTest)
       actions = {
-          "Study Variables & values", "Scroll right", "Scroll right", "Read",
+          "Study Variables and assignment", "Scroll right", "Scroll right", "Read",
           "Start practice",           "Scroll left",  "Home"};
     if (undoTest)
-      actions = {"Study Variables & values",
+      actions = {"Study Variables and assignment",
                  "Start practice",
                  "Next practice question",
                  "Undo",
@@ -1314,6 +1320,13 @@ int main(int argc, char **argv) {
                  "Redo",
                  "Check answer",
                  "Summary"};
+    if (authoredTest)
+      actions = {"Study Variables and assignment", "Start practice",
+                 "Enter answer: wrong", "Check answer", "1. Concept",
+                 "Try again", "Enter answer: 5", "Check answer",
+                 "Next practice question", "Enter answer: int", "Check answer",
+                 "Try the fresh check", "Enter answer: 4", "Check answer",
+                 "View summary", "Progress"};
     RenderTexture2D captureTarget{};
     if (!capture.empty())
       captureTarget = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
@@ -1345,12 +1358,12 @@ int main(int argc, char **argv) {
         ui.automaticAction = actions[action];
       else
         ui.automaticAction.clear();
-      if (smoke && !guided && !reviewTest && !codeTest && !undoTest &&
+      if (smoke && !guided && !reviewTest && !codeTest && !undoTest && !authoredTest &&
           resumeTest.empty() && action == 1 && !ui.automaticAction.empty()) {
         ui.scroll = std::min(80.f, ui.maxScroll);
         expectedCatalogueScroll = ui.scroll;
       }
-      if (smoke && !guided && !reviewTest && !codeTest && !undoTest &&
+      if (smoke && !guided && !reviewTest && !codeTest && !undoTest && !authoredTest &&
           resumeTest.empty() && action == 6 && !ui.automaticAction.empty()) {
         ui.draft().set("inx");
         ui.draft().moveTo(2);
@@ -1364,6 +1377,13 @@ int main(int argc, char **argv) {
         ui.draft().moveTo(2);
         ui.draft().eraseForward();
         ui.draft().insert("t");
+      }
+      const bool scriptedInput = ui.automaticAction.rfind("Enter answer: ", 0) == 0;
+      if (scriptedInput) {
+        if (ui.screen != Screen::Lesson || (ui.stage != 1 && ui.stage != 2) ||
+            lessons[ui.lesson].questions[ui.question].type == QuestionType::Choice)
+          throw std::runtime_error("Scripted answer requires a visible text question.");
+        ui.draft().set(ui.automaticAction.substr(14));
       }
       ui.automaticScope.clear();
       if (codeTest) {
@@ -1409,6 +1429,8 @@ int main(int argc, char **argv) {
         BeginDrawing();
       ClearBackground(paper);
       ui.draw();
+      if (scriptedInput)
+        ui.actionUsed = true;
       if (!capture.empty()) {
         EndTextureMode();
         BeginDrawing();
@@ -1442,7 +1464,7 @@ int main(int argc, char **argv) {
         }
       }
       if (smoke && action == actions.size() && pendingCapture.empty()) {
-        if (!guided && !reviewTest && !codeTest && !undoTest &&
+        if (!guided && !reviewTest && !codeTest && !undoTest && !authoredTest &&
             resumeTest.empty())
           testOk = controller.completed(0) == 1 &&
                    controller.profile.evidence.at("c-var-p2").helped &&
@@ -1452,6 +1474,14 @@ int main(int argc, char **argv) {
                    ui.drafts.at("c-var-p2").value() == "int" &&
                    ui.practicePosition.at("c-variables") == 1 &&
                    std::abs(ui.scroll - expectedCatalogueScroll) < 1;
+        if (authoredTest)
+          testOk = lessons[0].body == cwaypoint::variablesLesson().explanation &&
+                   lessons[0].questions[0].type == QuestionType::Output &&
+                   controller.completed(0) == 2 && controller.reviewItems().empty() &&
+                   controller.status(0, 0) == "Solved with practice" &&
+                   controller.status(0, 2) == "Solved independently on first attempt" &&
+                   controller.profile.evidence.at("c-var-p1").attempts == 2 &&
+                   ui.screen == Screen::Progress;
         if (guided)
           testOk = controller.completed(0) == 2 &&
                    controller.completed(2) == 2 &&

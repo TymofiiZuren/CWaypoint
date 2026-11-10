@@ -1,51 +1,9 @@
 #include "core.hpp"
+#include "lesson_adapter.hpp"
 namespace cw {
 std::vector<Lesson> sampleLessons() {
   return {
-      {"c-variables",
-       "C",
-       "Variables & values",
-       "Follow how assignment changes a stored value.",
-       "A variable names a value in memory. In C, declare its type before "
-       "using it. An assignment replaces the previous value: the expression on "
-       "the right is evaluated first, then stored on the left.\n\nRead the "
-       "example, predict its output, then inspect each step in the "
-       "walkthrough. These exercises check a specific answer; the app does not "
-       "compile your input.",
-       "int score = 3;\nscore = score + 2;\nprintf(\"%d\\n\", score);",
-       {{"c-var-p1",
-         "What is score after both assignments?",
-         "5",
-         {"3", "5", "2"},
-         {"Follow the statements in order.",
-          "The second line adds 2 to the existing score.",
-          "score begins at 3. Assignment stores 3 + 2, so score is 5."},
-         QuestionType::Choice,
-         "The second assignment stores 3 + 2, which is 5."},
-        {"c-var-p2",
-         "Fill the missing type: ___ score = 3;",
-         "int",
-         {},
-         {"This variable stores a whole number.",
-          "C's basic signed integer type has three letters.",
-          "int score = 3; declares an integer named score."},
-         QuestionType::Token,
-         "int declares a whole-number variable."},
-        {"c-var-fresh",
-         "A new example: int n = 7; n = n - 3; What is n?",
-         "4",
-         {},
-         {"Apply the second assignment to the first value.",
-          "Subtract 3 from the current value 7.",
-          "The new value is 7 - 3 = 4."},
-         QuestionType::Output,
-         "Assignment replaces 7 with 4."}},
-       {{"int score = 3;", "score = 3",
-         "Declaration creates an integer and gives it the value 3."},
-        {"score = score + 2;", "score = 5",
-         "Read score on the right, add 2, then replace its stored value."},
-        {"printf(\"%d\\n\", score);", "score = 5 | output: 5",
-         "Output reads the current value without changing it."}}},
+      adaptVariablesLesson(cwaypoint::variablesLesson()),
       {"cpp-strings",
        "C++",
        "Strings & text",
