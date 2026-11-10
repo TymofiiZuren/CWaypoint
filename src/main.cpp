@@ -1230,8 +1230,9 @@ int main(int argc, char **argv) {
     SetExitKey(KEY_NULL);
     UI ui(lessons, store, controller);
     Image fire = LoadImageFromMemory(".png", streakFirePng, sizeof(streakFirePng));
+    ImageFormat(&fire, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
     ui.streakFire = LoadTextureFromImage(fire);
-    ImageColorGrayscale(&fire);
+    ImageColorTint(&fire, Color{160, 160, 160, 140});
     ImageFormat(&fire, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
     ui.streakInactive = LoadTextureFromImage(fire);
     UnloadImage(fire);
