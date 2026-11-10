@@ -66,3 +66,7 @@ Default progress location: `~/Library/Application Support/CWaypoint`. Use `--dat
 ## Oleksandr's first learning core
 
 The first authored C variables lesson and evaluator are also available as a standalone C++17 handoff in `src/learning/`. Run `make test` to verify that evaluator and compile-check its C example; run `make demo` for a terminal demonstration. See [integration notes](docs/integration.md) and [Friday record](docs/friday-2026-11-06.md). The raylib app now consumes that authored variables lesson through a bounded adapter. Its application assessment revision is 2, so earlier question evidence does not count as completion of the revised assessment. Run the executable with `--data-dir <isolated-folder> --authored-test` to verify the integrated handler journey; add `--compact` for the minimum window size.
+
+### Dark study workspace
+
+The current macOS build uses a dark theme, top navigation, logo Home link and gear menu. Practice shows matching question code beside the answer on wide windows and stacks it at compact size. Hints expand through Get a hint. Save details opens the full recovery message in Settings. See [DESIGN.md](DESIGN.md) for the implemented layout and native-input limitations. `--large-text` is an isolated screenshot/scenario helper for checking the 24px setting.
