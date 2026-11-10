@@ -807,9 +807,19 @@ struct UI {
                   "correct attempt without help is recorded as independent.",
                   muted, 16);
       const auto &q = l.questions[question];
+      if (stage == 1) {
+        DrawRectangleRec({x, y, width, 5}, line);
+        DrawRectangleRec({x, y, width * (question + 1) / 2, 5}, blue);
+        y += 15;
+        text("Code example", x, y, 16, muted);
+        y += 24;
+        code(l.code, l.id + ":example");
+      }
       heading(q.prompt);
-      code(l.code, l.id + ":example");
+      if (stage == 2)
+        code(l.code, l.id + ":example");
       if (q.type == QuestionType::Choice) {
+        paragraph("Choose one answer, then select Check answer.", muted, 16);
         for (const auto &choice : q.choices) {
           bool selected = draft().value() == choice;
           if (rowButton((selected ? "Selected: " : "") + choice, selected)) {
@@ -842,33 +852,6 @@ struct UI {
                                                             : muted);
         paragraph(app.status(lesson, question), muted, 16);
       }
-      heading("Need a little help?");
-      paragraph("Authored hints work offline. Opening a hint or revealing the "
-                "answer records help for this question.",
-                muted, 16);
-      for (int i = 0; i < 3; i++)
-        if (button(std::string(i == 0   ? "1. Concept"
-                               : i == 1 ? "2. Guidance"
-                                        : "3. Explanation"),
-                   {x + i * (width / 3 + 3), y, width / 3 - 8, 44},
-                   hint == i + 1)) {
-          if (app.help(lesson, question))
-            hint = i + 1;
-        }
-      y += 64;
-      if (hint)
-        paragraph(q.hints[hint - 1], ink);
-      if (rowButton("Reveal answer", false, true, 200)) {
-        if (app.help(lesson, question)) {
-          hint = 3;
-          feedback = "Answer: " + q.answer + ". " + q.explanation;
-          verdict = Verdict::Invalid;
-        }
-      }
-      paragraph(
-          "AI hints are not configured. Offline hints are always available. "
-          "Provider integration belongs to Oleksandr's module.",
-          muted, 16);
       if (reviewMode) {
         auto remaining = app.reviewItems(reviewTrack);
         if (!app.profile.review.count(q.id))
@@ -907,6 +890,29 @@ struct UI {
         stage = 3;
         scroll = 0;
         savePosition();
+      }
+      heading("Need a little help?");
+      paragraph("Authored hints work offline. Opening a hint or revealing the "
+                "answer records help for this question.",
+                muted, 16);
+      for (int i = 0; i < 3; i++)
+        if (button(std::string(i == 0   ? "1. Concept"
+                               : i == 1 ? "2. Guidance"
+                                        : "3. Explanation"),
+                   {x + i * (width / 3 + 3), y, width / 3 - 8, 44},
+                   hint == i + 1)) {
+          if (app.help(lesson, question))
+            hint = i + 1;
+        }
+      y += 64;
+      if (hint)
+        paragraph(q.hints[hint - 1], ink);
+      if (rowButton("Reveal answer", false, true, 200)) {
+        if (app.help(lesson, question)) {
+          hint = 3;
+          feedback = "Answer: " + q.answer + ". " + q.explanation;
+          verdict = Verdict::Invalid;
+        }
       }
     } else {
       heading(app.completed(lesson) == 2 ? "Practice complete"
@@ -1455,7 +1461,7 @@ int main(int argc, char **argv) {
         if (guided)
           testOk = controller.completed(0) == 2 &&
                    controller.completed(2) == 2 &&
-                   controller.nextLesson("C") == -1 &&
+                   controller.nextLesson("C") >= 0 && lessons[controller.nextLesson("C")].id == "c-conditions" &&
                    controller.nextLesson("C++") == 1 &&
                    controller.status(0, 2) ==
                        "Solved independently on first attempt" &&
