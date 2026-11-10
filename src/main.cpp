@@ -1,4 +1,5 @@
 #include "core.hpp"
+#include "streak_icon.hpp"
 #include "text_input.hpp"
 #include <algorithm>
 #include <cmath>
@@ -28,6 +29,8 @@ struct UI {
   const std::vector<Lesson> &lessons;
   Store &store;
   Controller &app;
+  Texture2D streakFire{};
+  Texture2D streakInactive{};
   int lesson = 0, stage = 0, question = 0, walk = 0, compare = 0, hint = 0;
   int focus = 0, widgets = 0, lastWidgets = 0;
   bool tabbing = false, answerFocus = false, resetConfirm = false;
@@ -534,7 +537,7 @@ struct UI {
       ny += 58;
     }
     text("Offline learning", 28, GetScreenHeight() - 100, 16, green);
-    text("3 starter lessons", 28, GetScreenHeight() - 72, 15, muted);
+    text(std::to_string(lessons.size()) + " lessons", 28, GetScreenHeight() - 72, 15, muted);
     DrawCircle(30, GetScreenHeight() - 123, 4, green);
   }
   void begin() {
@@ -569,7 +572,24 @@ struct UI {
         : screen == Screen::Settings  ? "Preferences"
                                       : "Welcome to CWaypoint";
     text(context, 264, 38, 19, muted);
-    text("C++17 + raylib", GetScreenWidth() - 174, 40, 15, muted);
+    const int days = studyStreak(app.profile.studyDays, localStudyDay());
+    const int level = days >= 14 ? 4 : days >= 7 ? 3 : days >= 3 ? 2 : 1;
+    const float badgeX = GetScreenWidth() - 118;
+    const Rectangle badge{badgeX, 24, 94, 42};
+    DrawRectangleRounded(badge, .5f, 12, days ? Color{255, 243, 229, 255} : Color{235, 239, 245, 255});
+    const float iconSize = 24.f + (days ? level : 0);
+    if (days)
+      DrawCircleGradient({badgeX + 25, 45}, 15 + level,
+                         Fade(ORANGE, .08f * level), Fade(ORANGE, 0));
+    DrawTexturePro(days ? streakFire : streakInactive, {0, 0, 72, 72},
+                   {badgeX + 10, 45 - iconSize / 2, iconSize, iconSize},
+                   {0, 0}, 0, WHITE);
+    text(std::to_string(days), badgeX + 49, 34, 23, days ? Color{190, 79, 16, 255} : muted);
+    if (CheckCollisionPointRec(GetMousePosition(), badge)) {
+      const std::string tip = std::to_string(days) + "-day streak. Solve one question today.";
+      DrawRectangle(GetScreenWidth() - 370, 72, 346, 34, ink);
+      text(tip, GetScreenWidth() - 360, 80, 14, WHITE);
+    }
     DrawLine(224, 90, GetScreenWidth(), 90, line);
     if (!IsKeyDown(KEY_LEFT_SHIFT) && !IsKeyDown(KEY_RIGHT_SHIFT))
       scroll = std::clamp(scroll - GetMouseWheelMove() * 48, 0.f, maxScroll);
@@ -667,10 +687,7 @@ struct UI {
              static_cast<int>(x + width), static_cast<int>(y), line);
     y += 28;
     heading("Built for offline practice");
-    paragraph("Three starter lessons make this application usable today: C "
-              "variables, C pointers and C++ strings. Oleksandr's full "
-              "14-lesson curriculum and optional AI integration will connect "
-              "through the shared content contract.");
+    paragraph("Explore variables, pointers, strings and conditions. Solve a question each day to build your learning streak.");
     if (rowButton("Explore lessons", false, true, 220))
       go(Screen::Catalogue);
     y += 14;
@@ -807,9 +824,19 @@ struct UI {
                   "correct attempt without help is recorded as independent.",
                   muted, 16);
       const auto &q = l.questions[question];
+      if (stage == 1) {
+        DrawRectangleRec({x, y, width, 5}, line);
+        DrawRectangleRec({x, y, width * (question + 1) / 2, 5}, blue);
+        y += 15;
+        text("Code example", x, y, 16, muted);
+        y += 24;
+        code(l.code, l.id + ":example");
+      }
       heading(q.prompt);
-      code(l.code, l.id + ":example");
+      if (stage == 2)
+        code(l.code, l.id + ":example");
       if (q.type == QuestionType::Choice) {
+        paragraph("Choose one answer, then select Check answer.", muted, 16);
         for (const auto &choice : q.choices) {
           bool selected = draft().value() == choice;
           if (rowButton((selected ? "Selected: " : "") + choice, selected)) {
@@ -842,33 +869,6 @@ struct UI {
                                                             : muted);
         paragraph(app.status(lesson, question), muted, 16);
       }
-      heading("Need a little help?");
-      paragraph("Authored hints work offline. Opening a hint or revealing the "
-                "answer records help for this question.",
-                muted, 16);
-      for (int i = 0; i < 3; i++)
-        if (button(std::string(i == 0   ? "1. Concept"
-                               : i == 1 ? "2. Guidance"
-                                        : "3. Explanation"),
-                   {x + i * (width / 3 + 3), y, width / 3 - 8, 44},
-                   hint == i + 1)) {
-          if (app.help(lesson, question))
-            hint = i + 1;
-        }
-      y += 64;
-      if (hint)
-        paragraph(q.hints[hint - 1], ink);
-      if (rowButton("Reveal answer", false, true, 200)) {
-        if (app.help(lesson, question)) {
-          hint = 3;
-          feedback = "Answer: " + q.answer + ". " + q.explanation;
-          verdict = Verdict::Invalid;
-        }
-      }
-      paragraph(
-          "AI hints are not configured. Offline hints are always available. "
-          "Provider integration belongs to Oleksandr's module.",
-          muted, 16);
       if (reviewMode) {
         auto remaining = app.reviewItems(reviewTrack);
         if (!app.profile.review.count(q.id))
@@ -908,8 +908,31 @@ struct UI {
         scroll = 0;
         savePosition();
       }
+      heading("Need a little help?");
+      paragraph("Authored hints work offline. Opening a hint or revealing the "
+                "answer records help for this question.",
+                muted, 16);
+      for (int i = 0; i < 3; i++)
+        if (button(std::string(i == 0   ? "1. Concept"
+                               : i == 1 ? "2. Guidance"
+                                        : "3. Explanation"),
+                   {x + i * (width / 3 + 3), y, width / 3 - 8, 44},
+                   hint == i + 1)) {
+          if (app.help(lesson, question))
+            hint = i + 1;
+        }
+      y += 64;
+      if (hint)
+        paragraph(q.hints[hint - 1], ink);
+      if (rowButton("Reveal answer", false, true, 200)) {
+        if (app.help(lesson, question)) {
+          hint = 3;
+          feedback = "Answer: " + q.answer + ". " + q.explanation;
+          verdict = Verdict::Invalid;
+        }
+      }
     } else {
-      heading(app.completed(lesson) == 2 ? "Practice complete"
+      heading(app.completed(lesson) == 2 ? "Lesson complete. Well done!"
                                          : "Keep building your understanding");
       paragraph(std::to_string(app.completed(lesson)) +
                 " of 2 required practice questions solved. Fresh-check "
@@ -1206,6 +1229,15 @@ int main(int argc, char **argv) {
     SetTargetFPS(60);
     SetExitKey(KEY_NULL);
     UI ui(lessons, store, controller);
+    Image fire = LoadImageFromMemory(".png", streakFirePng, sizeof(streakFirePng));
+    ImageFormat(&fire, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
+    ui.streakFire = LoadTextureFromImage(fire);
+    ImageColorTint(&fire, Color{160, 160, 160, 140});
+    ImageFormat(&fire, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
+    ui.streakInactive = LoadTextureFromImage(fire);
+    UnloadImage(fire);
+    SetTextureFilter(ui.streakFire, TEXTURE_FILTER_BILINEAR);
+    SetTextureFilter(ui.streakInactive, TEXTURE_FILTER_BILINEAR);
     ui.font = LoadFontEx("/System/Library/Fonts/Supplemental/Arial.ttf", 48,
                          nullptr, 0);
     ui.mono = LoadFontEx("/System/Library/Fonts/Supplemental/Andale Mono.ttf",
@@ -1455,7 +1487,7 @@ int main(int argc, char **argv) {
         if (guided)
           testOk = controller.completed(0) == 2 &&
                    controller.completed(2) == 2 &&
-                   controller.nextLesson("C") == -1 &&
+                   controller.nextLesson("C") >= 0 && lessons[controller.nextLesson("C")].id == "c-conditions" &&
                    controller.nextLesson("C++") == 1 &&
                    controller.status(0, 2) ==
                        "Solved independently on first attempt" &&
@@ -1506,6 +1538,8 @@ int main(int argc, char **argv) {
     }
     if (!capture.empty())
       UnloadRenderTexture(captureTarget);
+    UnloadTexture(ui.streakFire);
+    UnloadTexture(ui.streakInactive);
     if (ownMono)
       UnloadFont(ui.mono);
     if (ownFont)

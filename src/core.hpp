@@ -42,7 +42,10 @@ struct Evidence {
   bool issued = false, helped = false, solved = false, independent = false;
   int revision = 1;
 };
+int localStudyDay();
+int studyStreak(const std::set<int>& days, int today);
 struct Profile {
+  std::set<int> studyDays;
   std::map<std::string, Evidence> evidence;
   std::set<std::string> review;
   std::string lesson;

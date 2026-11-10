@@ -10,6 +10,33 @@ void check(bool ok, const char *s) {
     throw std::runtime_error(s);
 }
 int main() {
+  check(studyStreak({}, 100) == 0, "empty streak");
+  check(studyStreak({98, 99, 100}, 100) == 3, "consecutive days");
+  check(studyStreak({98, 99}, 100) == 2, "today still available");
+  check(studyStreak({98}, 100) == 0, "missed day expires streak");
+  check(studyStreak({98, 100, 101}, 100) == 1, "gap and future day");
+  auto activityRoot = std::filesystem::temp_directory_path() /
+      ("cwaypoint-activity-" + std::to_string(getpid()));
+  {
+    Store store(activityRoot);
+    auto lessons = sampleLessons();
+    Controller controller(lessons, store);
+    controller.submit(0, 0, "incorrect");
+    check(controller.profile.studyDays.empty(), "wrong answer earns no activity");
+    controller.retry();
+    controller.submit(0, 0, lessons[0].questions[0].answer);
+    controller.retry();
+    controller.submit(0, 0, lessons[0].questions[0].answer);
+    check(controller.profile.studyDays.size() == 1, "same day counted once");
+  }
+  {
+    Store store(activityRoot);
+    auto profile = store.load();
+    check(profile.studyDays.count(localStudyDay()) == 1, "activity restored");
+    check(store.reset(profile) && profile.studyDays.empty(), "reset clears activity");
+  }
+  std::filesystem::remove_all(activityRoot);
+
   auto dir = std::filesystem::temp_directory_path() /
              ("cwaypoint-test-" + std::to_string(getpid()));
   std::filesystem::create_directories(dir);
