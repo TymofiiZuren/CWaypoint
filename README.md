@@ -70,3 +70,7 @@ The first authored C variables lesson and evaluator are also available as a stan
 ### Dark study workspace
 
 The current macOS build uses a dark theme, top navigation, logo Home link and gear menu. Practice shows matching question code beside the answer on wide windows and stacks it at compact size. Hints expand through Get a hint. Save details opens the full recovery message in Settings. See [DESIGN.md](DESIGN.md) for the implemented layout and native-input limitations. `--large-text` is an isolated screenshot/scenario helper for checking the 24px setting.
+
+### Course catalogue and study workspace
+
+Home and Courses now show C foundations and C++ foundations together. Open either course to find modules on the left, course material in the centre and an offline study assistant on the right. The assistant accepts messages and quick prompts, returning authored notes/hints rather than live generated answers; exercise help is recorded before display. Conversations are session-only and cleared on progress reset. Run `--data-dir <isolated-folder> --course-test` (optionally `--compact`) to exercise both courses, module switching, assistant help and reset isolation.

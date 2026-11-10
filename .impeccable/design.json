@@ -5,7 +5,7 @@
     "shadows": [],
     "motion": [],
     "breakpoints": [
-      1000
+      1100
     ],
     "native": {
       "source": "src/main.cpp",
@@ -22,7 +22,8 @@
         "success": "#75d6a0",
         "error": "#ff9a9a"
       },
-      "navigation": "top bar with logo and gear menu",
+      "navigation": "top bar with logo, Courses and gear menu",
+      "courseWorkspace": "left module list, central material, right offline study assistant",
       "window": {
         "initial": [
           1280,
@@ -41,10 +42,10 @@
   "components": [],
   "narrative": {
     "northStar": "The Dark Study Workspace",
-    "overview": "Charcoal surfaces, top navigation and fixed rounded learning panels.",
+    "overview": "Charcoal course catalogue with module navigation, central material and an offline study assistant.",
     "keyCharacteristics": [
-      "Matching question code beside answers at wide widths.",
-      "Stacked reading order at compact widths.",
+      "Both C and C++ courses in one catalogue.",
+      "Three-panel course workspace at standard and compact widths.",
       "Explicit feedback and preserved learning evidence."
     ]
   }

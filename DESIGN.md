@@ -16,7 +16,7 @@ colors:
 
 # CWaypoint dark study workspace
 
-The implemented direction is a charcoal desktop workspace with top navigation, a CWaypoint monogram Home link, a drawn gear menu and fixed rounded internal panels. This replaces the former light sidebar design. UI/UX Pro Max's verified dark-mode style guidance informed the neutral layering and contrast; its broad light education/marketing recommendation was rejected as unsuitable for this native learning app. No web framework, font download or icon package was added.
+The implemented direction is a charcoal course workspace with top navigation, a CWaypoint monogram Home link, a drawn gear menu, course cards and fixed rounded internal panels. This replaces the former light sidebar design. UI/UX Pro Max's verified dark-mode style guidance informed the neutral layering and contrast; its broad light education/marketing recommendation was rejected as unsuitable for this native learning app. No web framework, font download or icon package was added.
 
 ## Colors and hierarchy
 
@@ -32,7 +32,9 @@ Use the installed macOS Arial and Andale Mono fonts without redistributing them.
 
 The window opens at 1280×840 with a 960×640 minimum. Top navigation occupies 80 logical pixels. Content is clipped below y=88 and above the 48-high status area. Workspace width is min(1200, window width minus 64), centered. `src/ui_layout.hpp` owns these measured geometry rules and pointer boundaries.
 
-At workspace widths of at least 1000, practice places example code beside the question/answer panel, separated by 24. Below that threshold, the question, matching code, input and Check answer stack in reading order. The current short starter practice fits at default text size; long questions and larger text require vertical scrolling. One main vertical scroll is retained. There are no draggable panels or saved panel coordinates.
+Home and Courses show both C and C++ course cards in one catalogue. Current lessons are the modules: C has variables and pointers, C++ has strings. Counts derive from the actual catalogue and practice completion; there are no placeholder curriculum totals. Course cards open the first unfinished module, or the first module when the track is complete. Continue restores the saved position.
+
+Course screens use three columns at both supported window sizes: a 160/192-wide module list on the left, material in the centre and a 224/280-wide study assistant on the right. `courseLayout()` in `src/ui_layout.hpp` owns this geometry. The centre remains at least 400 logical pixels wide at tested sizes. Material has its own main scroll; assistant transcript/hint options have a bounded scroll region and an anchored message field/Send action. Modules are currently few enough to fit; a larger curriculum will need a scrollable module list before expansion. Code preserves independent horizontal reading controls.
 
 Panels share their drawing primitive, surface, boundary and 16-logical-pixel corner radius. Existing buttons/input/code use raylib proportional rounded rectangles with eight segments. The top logo uses a simple C monogram with a waypoint dot, drawn with primitives rather than emoji or external brand assets.
 
@@ -42,9 +44,9 @@ The logo returns Home. Lessons, Review, Progress and Compare remain labelled acr
 
 ## Learning panels
 
-Home leads with the logo/wordmark and Start or Continue, followed by the existing next-lesson suggestion and review route. Practice groups the input, Check answer, editing actions and result. Undo/redo sit after Check answer so the main action stays close to the field. Editing history never changes saved evidence.
+Home and Courses share the catalogue. Top navigation, lesson sections and secondary actions use quiet text treatments with hover/focus; primary actions retain periwinkle fill. Selecting a module changes the centre material without replacing the course shell. Lesson stages use an underline instead of large filled tabs. Check answer leads before submission; Try again is shown after a result. Editing history never changes saved evidence.
 
-Hints are collapsed behind Get a hint. Expanding the controls does not reveal teaching content or count as assistance; selecting a hint/reveal still goes through the controller's durable help barrier. The three authored levels remain available when expanded. This is not automatic sequential hint unlocking.
+The right-hand Study assistant is explicitly offline. It displays authored notes for reading/summary, or authored hints for the active exercise. Quick prompts and typed messages use the same response path. Free-text prompts advance through authored hints rather than generating a response to arbitrary questions; this is disclosed in the panel. A hint is displayed only after controller help persistence succeeds. It does not grade, execute code or send network requests. Fresh checks with blocked issuance have no assistant reveal. Conversations are session-only, scoped to lesson/stage/question and cleared after a successful progress reset, along with assistant drafts and scroll positions.
 
 `Question::code` optionally supplies the code for that question; otherwise the lesson example is used. Fresh checks have explicit matching examples, including the variables a/b copy example. Code remains authored teaching data, never learner execution. Code-panel copy, focus and independent horizontal positions are retained.
 
@@ -56,4 +58,4 @@ A healthy profile has quiet status without an always-present Retry save action. 
 
 Tab, Shift+Tab, Enter/Space, Escape and macOS answer-editing shortcuts remain. Covered header/footer regions reject pointer activation. Draft editing is single-line ASCII with a 1024-byte limit; Unicode/IME and VoiceOver remain unimplemented. Focus in the broader immediate-mode interface still uses draw indices, so semantic focus restoration across every possible resize is not claimed.
 
-Source of truth is the native renderer and contract tests. Captures for this increment are under `.scratch/dark-ui/verify-standard-captures`, `verify-compact-captures`, `verify-large-captures` and `verify-smoke-captures`. Automated actions exercise real handlers/input models rather than physical OS key/clipboard events. There is no animation or motion-dependent content to disable.
+Source of truth is the native renderer and contract tests. Current captures are under `.scratch/course-ui/release-home-captures`, `release-course-captures`, `journey-captures` and `compact-captures`. Automated actions exercise real handlers/input models rather than physical OS key/clipboard events. There is no animation or motion-dependent content to disable.
