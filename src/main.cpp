@@ -534,7 +534,7 @@ struct UI {
       ny += 58;
     }
     text("Offline learning", 28, GetScreenHeight() - 100, 16, green);
-    text("3 starter lessons", 28, GetScreenHeight() - 72, 15, muted);
+    text(std::to_string(lessons.size()) + " lessons", 28, GetScreenHeight() - 72, 15, muted);
     DrawCircle(30, GetScreenHeight() - 123, 4, green);
   }
   void begin() {
@@ -632,6 +632,25 @@ struct UI {
     title("Small steps. Strong foundations.",
           "Read a clear example, predict what happens, and learn from the "
           "result. Your progress stays on this Mac.");
+    const int today = localStudyDay();
+    const int streak = studyStreak(app.profile.studyDays, today);
+    heading(std::to_string(streak) + (streak == 1 ? " day streak" : " day streak"));
+    paragraph(app.profile.studyDays.count(today)
+                  ? "Today's goal complete. You solved a question!"
+                  : "Solve one question today to keep learning.",
+              app.profile.studyDays.count(today) ? green : muted, 16);
+    for (int i = 0; i < 7; ++i) {
+      const bool active = app.profile.studyDays.count(today - 6 + i);
+      const float cx = x + 22 + i * 58;
+      DrawCircleV({cx, y + 18}, 16, active ? green : line);
+      if (active) {
+        DrawLineEx({cx - 7, y + 18}, {cx - 2, y + 23}, 2, WHITE);
+        DrawLineEx({cx - 2, y + 23}, {cx + 8, y + 12}, 2, WHITE);
+      }
+      text(i == 6 ? "Today" : std::to_string(6 - i) + "d ago",
+           cx - 20, y + 42, 14, muted);
+    }
+    y += 84;
     if (!app.profile.lesson.empty()) {
       for (int l = 0; l < static_cast<int>(lessons.size()); l++)
         if (lessons[l].id == app.profile.lesson) {
@@ -667,10 +686,7 @@ struct UI {
              static_cast<int>(x + width), static_cast<int>(y), line);
     y += 28;
     heading("Built for offline practice");
-    paragraph("Three starter lessons make this application usable today: C "
-              "variables, C pointers and C++ strings. Oleksandr's full "
-              "14-lesson curriculum and optional AI integration will connect "
-              "through the shared content contract.");
+    paragraph("Explore variables, pointers, strings and conditions. Solve a question each day to build your learning streak.");
     if (rowButton("Explore lessons", false, true, 220))
       go(Screen::Catalogue);
     y += 14;
@@ -915,7 +931,7 @@ struct UI {
         }
       }
     } else {
-      heading(app.completed(lesson) == 2 ? "Practice complete"
+      heading(app.completed(lesson) == 2 ? "Lesson complete. Well done!"
                                          : "Keep building your understanding");
       paragraph(std::to_string(app.completed(lesson)) +
                 " of 2 required practice questions solved. Fresh-check "
