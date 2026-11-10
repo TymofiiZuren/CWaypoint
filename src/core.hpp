@@ -13,6 +13,7 @@ struct Question {
   std::array<std::string, 3> hints;
   QuestionType type = QuestionType::Token;
   std::string explanation;
+  std::string code = {}; // Optional question-specific context; no learner execution.
 };
 struct Step {
   std::string code, state, explanation;
@@ -87,6 +88,7 @@ class Controller {
 public:
   Profile profile;
   std::string notice;
+  bool unsavedChanges = false;
   Controller(const std::vector<Lesson> &, Store &);
   bool issue(int lesson, int question);
   bool help(int lesson, int question);

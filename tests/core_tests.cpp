@@ -43,6 +43,44 @@ int main() {
   try {
     auto lessons = sampleLessons();
     check(validate(lessons).empty(), "sample contract");
+    {
+      const auto legacyTwo = dir / "version-two";
+      std::filesystem::create_directories(legacyTwo);
+      { std::ofstream f(legacyTwo / "manifest"); f << "CWAYPOINT 1 1\n"; }
+      { std::ofstream f(legacyTwo / "generation-1.save");
+        f << "CWPROFILE 2 1\n\"c-variables\" 1 18 0 1\n\"c-var-p1\" "
+          << lessons[0].revision << " 1 1 0 1 1 0\nRESUME 1 0 "
+          << lessons[0].revision << "\nEND\n";
+      }
+      Store store(legacyTwo);
+      auto profile = store.load();
+      check(profile.studyDays.empty() && profile.evidence.at("c-var-p1").solved &&
+            profile.question == 1, "version two loads without invented activity");
+      profile.studyDays.insert(localStudyDay());
+      check(store.save(profile), "version two upgrades to activity format");
+      auto restored = store.load();
+      check(restored.studyDays.count(localStudyDay()) && restored.question == 1,
+            "version three retains legacy progress and new activity");
+      std::ifstream backup(legacyTwo / "generation-1.save.bak");
+      std::string magic; int version=0; backup >> magic >> version;
+      check(version == 2, "version two backup retained after upgrade");
+    }
+    int activityCase=0;
+    for(const std::string &activity : {"ACTIVITY 2 100 100", "ACTIVITY 1 -1",
+         "ACTIVITY 1 100001", "ACTIVITY 50001", "ACTIVITY 1"}) {
+      const auto invalid = dir / ("invalid-activity-" + std::to_string(activityCase++));
+      std::filesystem::create_directories(invalid);
+      { std::ofstream f(invalid / "manifest"); f << "CWAYPOINT 1 1\n"; }
+      const std::string original="CWPROFILE 3 1\n\"\" 0 18 0 0\nRESUME 0 0 0\n" + activity + "\nEND\n";
+      { std::ofstream f(invalid / "generation-1.save"); f << original; }
+      Store store(invalid);
+      auto profile=store.load();
+      check(!store.writable() && profile.studyDays.empty(), "invalid activity stays preserved and read only");
+      std::ifstream f(invalid / "generation-1.save");
+      const std::string retained((std::istreambuf_iterator<char>(f)), {});
+      check(retained == original, "invalid activity file remains byte unchanged");
+    }
+
     check(validateWalkthrough(lessons[0].steps).empty(), "valid walkthrough");
     auto brokenSteps = lessons[0].steps;
     brokenSteps[0].state.clear();
@@ -210,7 +248,9 @@ int main() {
     }
     {
       std::ofstream f(legacy / "generation-1.save");
-      f << "CWPROFILE 1 1\n\"c-variables\" 1 18 0 1\n\"c-var-p1\" 1 1 1 0 1 1 "
+      // Isolate snapshot-format compatibility from assessment revision changes.
+      f << "CWPROFILE 1 1\n\"c-variables\" 1 18 0 1\n\"c-var-p1\" "
+        << lessons[0].revision << " 1 1 0 1 1 "
            "0\nEND\n";
     }
     {
@@ -292,6 +332,7 @@ int main() {
       std::filesystem::create_directory(failing / "generation-1.save.tmp");
       check(!c.help(0, 2),
             "no hint displayed before failed assistance barrier");
+      check(c.unsavedChanges, "save failure is structured UI state");
       check(c.submit(0, 2, lessons[0].questions[2].answer).kind ==
                 Verdict::Invalid,
             "no result displayed before failed save");
@@ -304,6 +345,7 @@ int main() {
       std::filesystem::rename(failing / "generation-1.save.tmp",
                               failing / "blocked-write-fixture");
       check(c.save(), "retry save persists pending result");
+      check(!c.unsavedChanges, "save recovery clears structured UI state");
       Controller restored(lessons, store);
       check(restored.profile.evidence.at("c-var-fresh").attempts == 1 &&
                 restored.solved(0, 2),

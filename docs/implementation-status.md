@@ -1,4 +1,6 @@
-# Working executable — 6 November 2026
+# Working executable
+
+Current delivery status: 10 November 2026. Four lessons, twelve questions, 36 authored hints, course workspace and version-three activity saves are integrated. Earlier dated increments below retain their historical counts; the final partner-first delivery entry describes the current integration.
 
 ## Delivered
 
@@ -81,4 +83,44 @@ The Word design/work plans and reviewed Markdown plan remain planning snapshots;
 
 Suggested commit message: `feat: add runnable macOS learning app with offline practice and progress`
 
-Pre-landing review: failed-save submissions now remain guarded until their result is durably saved. Repeated Check answer or Try again actions cannot inflate the pending attempt. Retry save persists that result once; a new attempt still requires an explicit retry. Regression coverage verifies both failure and recovery. Oleksandr's first lesson/evaluator handoff is present under src/learning and tested independently; adapting it into the app catalogue remains follow-up work.
+Pre-landing review: failed-save submissions now remain guarded until their result is durably saved. Repeated Check answer or Try again actions cannot inflate the pending attempt. Retry save persists that result once; a new attempt still requires an explicit retry. Regression coverage verifies both failure and recovery. At that pre-landing stage, Oleksandr's first lesson/evaluator handoff was tested independently under src/learning. The integration is delivered in the next increment below.
+
+## Authored lesson integration — 10 November 2026
+
+The graphical catalogue now consumes Oleksandr's checked-in C variables lesson through a bounded adapter. Authored teaching text, output/token questions, explanations and all nine hints are retained; the existing app-owned objective and matching walkthrough remain. The author revision-1 record maps explicitly to application assessment revision 2 with established application IDs. Old assessment evidence remains stored but is excluded from current completion/review, and revised Continue positions restart at the explanation. No storage-format change, production dependency or standalone author-module change was required.
+
+The adapter rejects unsupported shapes, including multiple accepted answers, single-choice handoff records without options, incorrect practice/fresh ordering, missing teaching fields, changed author revisions and answers exceeding the input limit. Runtime grading remains in the graphical evaluator and controller; standalone evaluator parity is checked for the supported bounded output/token inputs.
+
+Validation: release CMake build and all three CTest suites passed; the new adapter test includes a real persisted revision transition and restart. `make test` passed. The integrated UI scenario passed at standard and compact sizes; smoke, guided progression, mistake review, code scrolling, undo/redo and four independent resume phases passed. Authored example source was extracted, compiled in a C17 harness with `-Wall -Wextra -Werror`, and printed 5; the fresh-check statements compiled separately and printed 4. Signature verification, bundled-library inspection and `git diff --check` passed. Compact renders were inspected. The local ZIP was refreshed and its extracted executable was exercised outside the repository.
+
+Primary signal: met for the automated authored lesson journey and local packaged executable. Native keyboard/clipboard testing remains unverified: the available native UI target showed an older running build, which was left running. Another Mac and Oleksandr's review of the adapted teaching content remain acceptance follow-ups. Live AI and the remaining full curriculum are still pending.
+
+## Dark desktop redesign — 10 November 2026
+
+Implemented the requested charcoal/periwinkle theme, top navigation, monogram Home link, vector gear menu and fixed rounded internal panels. Wide practice places code beside the answer; compact practice stacks matching code and input. Hints expand on demand, editing controls follow Check answer, and next/retry actions receive emphasis according to learning state. Home now leads with the logo and learning actions. The menu provides Preferences and a dedicated keyboard-help view.
+
+Question-specific code is a bounded optional field across producer, adapter, validator and renderer. Existing fresh checks display their own examples; accepted answers, assessment IDs/revisions and grading semantics are unchanged. A controller-owned unsavedChanges flag drives save-recovery UI; failure details are readable in Settings, with retry available for writable profiles. Reset success clears the flag. Save barriers and snapshot format remain unchanged.
+
+Verification: Release CMake configure/build and all four CTest suites passed (learning/storage, editor, authored integration and responsive workspace). make test passed. Isolated executable runs passed for authored practice at standard/compact/24px compact sizes, smoke including actual menu entries and keyboard-help route, guided progression, mistake review, code scrolling, undo/redo and four separate restart phases. Final packaged ZIP was extracted and its authored journey passed from /tmp. App/extracted-app signature verification and git diff --check passed. Native renders were inspected for Home, standard/compact practice, fresh-check code, menu and large text. Opaque text contrast pairs were calculated and recorded in DESIGN.md.
+
+Primary signal: met for the requested visual layout and automated executable learning journeys. Physical OS keyboard/clipboard and screen-reader behavior remain unverified or unsupported; no learner usability study or second-Mac acceptance is claimed. Largest text and longer examples still need scrolling. The wider roadmap's compact progress rows, side-by-side Compare view and semantic focus restoration remain follow-ups. DESIGN.md and the generated native sidecar describe the delivered implementation, not those future features. The sidecar is regenerated with scripts/generate_design_metadata.py.
+
+## Course catalogue and three-panel study workspace — 10 November 2026
+
+Replaced the previous stacked Home/lesson composition with a common C/C++ course catalogue and a course shell: left module list, central material/practice and right Study assistant. Existing lessons are modules grouped by track; counts and completion come from real records. Cards and their Open actions enter the first unfinished module. Top navigation and secondary actions are quieter text controls, stage selection uses an underline, and Try again appears after a result. No placeholder courses or extra lessons were added.
+
+The assistant supports typed messages and quick prompts, with a bounded independently scrolling transcript and fixed input/Send action. It returns existing authored notes or hints, explicitly labelled as offline guidance; it cannot answer arbitrary questions like a live model. Exercise responses go through the same durable help barrier and do not create answer attempts. Blocked fresh checks reveal no assistant content. Conversations/drafts are session-only and reset clears them to prevent assistance leaking into a new profile.
+
+Validation: Release build, all four CTest suites and make test passed. Geometry tests cover centre minimum width and non-overlapping side panes at 960, 1280 and 1600. New standard/compact course scenarios open both tracks, switch modules, grade C/C++ answers, send an assistant message, verify help without an answer attempt, then reset and verify conversations/evidence are cleared. Smoke, guided progression, review, code scrolling, undo/redo and four separate restart phases passed. Standard/compact catalogue, material and assistant renders were inspected. Signature verification and git diff --check passed. The refreshed ZIP was extracted and its course scenario was run outside the repository.
+
+Primary signal is met for automated course navigation, authored assistance and profile-reset isolation. Native OS keyboard/clipboard testing and learner usability testing remain pending. The assistant uses authored responses, not live AI; provider integration remains a separate prerequisite. Module navigation fits the current three-lesson catalogue; scrolling that list is needed before the full 14-lesson curriculum is delivered. No snapshot-format, dependency or grading change was required.
+
+## Partner-first merge and delivery — 10 November 2026
+
+Oleksandr's PR #3 was reviewed, built and tested separately, then merged first into main as 8e8bb34. Integration into this branch exposed real conflicts in main.cpp and sample_content.cpp. Commit be30d1a resolves them by retaining the course catalogue/three-panel interface and authored variables adapter, adding C conditions as the third C module, and preserving daily activity/streaks and version-three saves. Streak badge geometry was adapted to avoid the gear/navigation; module navigation now scrolls and reveals the selected module. Conditions questions have matching score-49 and height examples.
+
+Four CTest suites and make test passed after integration. Added explicit version-two-to-three upgrade/backup checks and malformed ACTIVITY bounds, duplicate and truncation fixtures, verifying original files remain unchanged. Conditions code compiled as C17 with warnings treated as errors and printed Retry at 49, Pass at 50 and 51. The integrated conditions and course journeys passed. The partner-only build also passed both tests, make test and uncaptured smoke/guided journeys, resolving the previously reported uncaptured-smoke concern in this environment. Physical input/other-Mac testing and human acceptance of the inactive flame styling remain pending.
+
+The three-hour development journal for Tymofii is under docs/journals, with Markdown source and a visually verified Word copy matching the earlier journal format. Hours are self-reported, not measured. Older untracked 6 November journal files were left outside the delivery commits.
+
+Final delivery verification: all twelve isolated combined executable runs passed (course standard/compact, conditions compact, smoke, guided, review, code, undo and four resume phases). Both app and extracted-app signatures verified. The feature branch contains the partner merge and the tracked three-hour Word/Markdown journal; latest-base ancestry and normal-push ancestry were checked before publication.

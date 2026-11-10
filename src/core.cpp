@@ -80,7 +80,7 @@ std::string validate(const std::vector<Lesson> &ls) {
       return "Invalid lesson record";
     for (const auto &q : l.questions) {
       if (q.id.empty() || !ids.insert(q.id).second || q.prompt.empty() ||
-          q.answer.empty() || q.prompt.size() > 8192)
+          q.answer.empty() || q.prompt.size() > 8192 || q.code.size() > 8192)
         return "Invalid or duplicate question";
       for (const auto &h : q.hints)
         if (h.empty() || h.size() > 8192)
@@ -384,6 +384,7 @@ Controller::Controller(const std::vector<Lesson> &ls, Store &s)
 }
 bool Controller::persist() {
   bool ok = store.save(profile);
+  unsavedChanges = !ok;
   notice = store.status();
   if (ok)
     pendingSubmission = false;
@@ -545,6 +546,7 @@ bool Controller::reset() {
   }
   submitted.clear();
   pendingSubmission = false;
+  unsavedChanges = false;
   notice = store.status();
   return true;
 }
