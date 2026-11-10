@@ -1611,7 +1611,7 @@ int main(int argc, char **argv) {
                "Pass","Check answer","Next practice question","Enter answer: Retry","Check answer",
                "Try the fresh check","Enter answer: closed","Check answer","View summary"};
     if(pointerTest)
-      actions={"Lessons","Open C course","Start practice","Enter answer: 5","Check answer",
+      actions={"Lessons","Open C course","Next step","Next step","Previous","Start practice","Enter answer: 5","Check answer",
                "Next practice question","Enter answer: int","Check answer","Summary",
                "All courses","Open C++ course","Practice","Enter answer: Hi Ada","Check answer",
                "Settings","Preferences","Home"};
@@ -1746,6 +1746,11 @@ int main(int argc, char **argv) {
       if (smoke && !ui.automaticAction.empty()) {
         if (ui.actionUsed) {
           action++;
+          if (pointerTest && action >= 3 && action <= 5) {
+            const int expectedStep = action == 4 ? 2 : 1;
+            if (ui.walk != expectedStep || controller.profile.walkthrough != expectedStep)
+              throw std::runtime_error("Walkthrough button did not update the saved step.");
+          }
           if(courseTest && action==16)
             courseAssistanceOk=controller.solved(1,0) && controller.solved(2,0) &&
               controller.profile.evidence.at("c-var-p1").helped &&
