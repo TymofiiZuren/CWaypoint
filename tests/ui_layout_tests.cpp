@@ -13,5 +13,13 @@ int main() {
  }
  assert(!cw::workspaceLayout(960,640).columns);
  assert(cw::workspaceLayout(1280,840).columns);
+ for (int w : {960,1280,1600}) {
+  auto c = cw::courseLayout(w);
+  assert(c.moduleWidth >= 160 && c.assistantWidth >= 224);
+  assert(c.materialWidth >= 400);
+  assert(c.materialX >= c.moduleX + c.moduleWidth + 16);
+  assert(c.assistantX >= c.materialX + c.materialWidth + 16);
+  assert(c.assistantX + c.assistantWidth <= w - 16);
+ }
  std::cout << "Workspace layout passed\n";
 }
