@@ -1,4 +1,5 @@
 #include "core.hpp"
+#include "streak_icon.hpp"
 #include "text_input.hpp"
 #include <algorithm>
 #include <cmath>
@@ -28,6 +29,8 @@ struct UI {
   const std::vector<Lesson> &lessons;
   Store &store;
   Controller &app;
+  Texture2D streakFire{};
+  Texture2D streakInactive{};
   int lesson = 0, stage = 0, question = 0, walk = 0, compare = 0, hint = 0;
   int focus = 0, widgets = 0, lastWidgets = 0;
   bool tabbing = false, answerFocus = false, resetConfirm = false;
@@ -569,7 +572,24 @@ struct UI {
         : screen == Screen::Settings  ? "Preferences"
                                       : "Welcome to CWaypoint";
     text(context, 264, 38, 19, muted);
-    text("C++17 + raylib", GetScreenWidth() - 174, 40, 15, muted);
+    const int days = studyStreak(app.profile.studyDays, localStudyDay());
+    const int level = days >= 14 ? 4 : days >= 7 ? 3 : days >= 3 ? 2 : 1;
+    const float badgeX = GetScreenWidth() - 118;
+    const Rectangle badge{badgeX, 24, 94, 42};
+    DrawRectangleRounded(badge, .5f, 12, days ? Color{255, 243, 229, 255} : Color{235, 239, 245, 255});
+    const float iconSize = 24.f + (days ? level : 0);
+    if (days)
+      DrawCircleGradient({badgeX + 25, 45}, 15 + level,
+                         Fade(ORANGE, .08f * level), Fade(ORANGE, 0));
+    DrawTexturePro(days ? streakFire : streakInactive, {0, 0, 72, 72},
+                   {badgeX + 10, 45 - iconSize / 2, iconSize, iconSize},
+                   {0, 0}, 0, WHITE);
+    text(std::to_string(days), badgeX + 49, 34, 23, days ? Color{190, 79, 16, 255} : muted);
+    if (CheckCollisionPointRec(GetMousePosition(), badge)) {
+      const std::string tip = std::to_string(days) + "-day streak. Solve one question today.";
+      DrawRectangle(GetScreenWidth() - 370, 72, 346, 34, ink);
+      text(tip, GetScreenWidth() - 360, 80, 14, WHITE);
+    }
     DrawLine(224, 90, GetScreenWidth(), 90, line);
     if (!IsKeyDown(KEY_LEFT_SHIFT) && !IsKeyDown(KEY_RIGHT_SHIFT))
       scroll = std::clamp(scroll - GetMouseWheelMove() * 48, 0.f, maxScroll);
@@ -632,46 +652,6 @@ struct UI {
     title("Small steps. Strong foundations.",
           "Read a clear example, predict what happens, and learn from the "
           "result. Your progress stays on this Mac.");
-    const int today = localStudyDay();
-    const int streak = studyStreak(app.profile.studyDays, today);
-    const int strength = streak >= 14 ? 4 : streak >= 7 ? 3 : streak >= 3 ? 2 : 1;
-    const float flameSize = streak ? 48.f + strength * 6 : 48.f;
-    const float flameX = x + 12, flameY = y + 10;
-    if (streak) {
-      for (int ring = 3; ring > 0; --ring)
-        DrawCircleV({flameX + flameSize / 2, flameY + flameSize * .65f},
-                    flameSize * (.4f + ring * .12f),
-                    Fade(ORANGE, .025f * strength));
-    }
-    // An emoji-style flame drawn with native shapes stays crisp at any scale.
-    auto flame = [](float left, float top, float scale, Color outer, Color inner) {
-      const Vector2 outline[] = {{58,0},{68,28},{79,19},{94,50},{97,70},
-          {86,90},{63,100},{35,98},{13,84},{5,64},{12,43},{29,20},{31,49},{45,33}};
-      const Vector2 center{left + scale * .5f, top + scale * .7f};
-      for (int i = 0; i < 14; ++i) {
-        const auto a = outline[i], b = outline[(i + 1) % 14];
-        DrawTriangle(center, {left + b.x * scale / 100, top + b.y * scale / 100},
-                     {left + a.x * scale / 100, top + a.y * scale / 100}, outer);
-      }
-      DrawEllipse(static_cast<int>(left + scale * .51f),
-                  static_cast<int>(top + scale * .78f), scale * .21f, scale * .2f, inner);
-      DrawTriangle({left + scale * .3f, top + scale * .78f},
-                   {left + scale * .72f, top + scale * .78f},
-                   {left + scale * .57f, top + scale * .39f}, inner);
-    };
-    flame(flameX, flameY, flameSize,
-          streak ? Color{255, 91, 30, 255} : Color{173, 185, 201, 255},
-          streak ? Color{255, 214, 75, 255} : Color{215, 224, 235, 255});
-    text(std::to_string(streak), x + 106, y + 3, 46,
-         streak ? Color{222, 76, 20, 255} : muted);
-    text("day streak", x + 106, y + 57, 18, ink);
-    y += 104;
-    paragraph(app.profile.studyDays.count(today)
-                  ? "You're on fire! Today's learning goal is complete."
-                  : streak ? "Keep your flame alive. Solve a question today."
-                           : "Light your first flame. Solve one question today.",
-              muted, 16);
-    y += 12;
     if (!app.profile.lesson.empty()) {
       for (int l = 0; l < static_cast<int>(lessons.size()); l++)
         if (lessons[l].id == app.profile.lesson) {
@@ -1249,6 +1229,14 @@ int main(int argc, char **argv) {
     SetTargetFPS(60);
     SetExitKey(KEY_NULL);
     UI ui(lessons, store, controller);
+    Image fire = LoadImageFromMemory(".png", streakFirePng, sizeof(streakFirePng));
+    ui.streakFire = LoadTextureFromImage(fire);
+    ImageColorGrayscale(&fire);
+    ImageFormat(&fire, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
+    ui.streakInactive = LoadTextureFromImage(fire);
+    UnloadImage(fire);
+    SetTextureFilter(ui.streakFire, TEXTURE_FILTER_BILINEAR);
+    SetTextureFilter(ui.streakInactive, TEXTURE_FILTER_BILINEAR);
     ui.font = LoadFontEx("/System/Library/Fonts/Supplemental/Arial.ttf", 48,
                          nullptr, 0);
     ui.mono = LoadFontEx("/System/Library/Fonts/Supplemental/Andale Mono.ttf",
@@ -1549,6 +1537,8 @@ int main(int argc, char **argv) {
     }
     if (!capture.empty())
       UnloadRenderTexture(captureTarget);
+    UnloadTexture(ui.streakFire);
+    UnloadTexture(ui.streakInactive);
     if (ownMono)
       UnloadFont(ui.mono);
     if (ownFont)
