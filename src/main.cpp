@@ -634,23 +634,44 @@ struct UI {
           "result. Your progress stays on this Mac.");
     const int today = localStudyDay();
     const int streak = studyStreak(app.profile.studyDays, today);
-    heading(std::to_string(streak) + (streak == 1 ? " day streak" : " day streak"));
-    paragraph(app.profile.studyDays.count(today)
-                  ? "Today's goal complete. You solved a question!"
-                  : "Solve one question today to keep learning.",
-              app.profile.studyDays.count(today) ? green : muted, 16);
-    for (int i = 0; i < 7; ++i) {
-      const bool active = app.profile.studyDays.count(today - 6 + i);
-      const float cx = x + 22 + i * 58;
-      DrawCircleV({cx, y + 18}, 16, active ? green : line);
-      if (active) {
-        DrawLineEx({cx - 7, y + 18}, {cx - 2, y + 23}, 2, WHITE);
-        DrawLineEx({cx - 2, y + 23}, {cx + 8, y + 12}, 2, WHITE);
-      }
-      text(i == 6 ? "Today" : std::to_string(6 - i) + "d ago",
-           cx - 20, y + 42, 14, muted);
+    const int strength = streak >= 14 ? 4 : streak >= 7 ? 3 : streak >= 3 ? 2 : 1;
+    const float flameSize = streak ? 48.f + strength * 6 : 48.f;
+    const float flameX = x + 12, flameY = y + 10;
+    if (streak) {
+      for (int ring = 3; ring > 0; --ring)
+        DrawCircleV({flameX + flameSize / 2, flameY + flameSize * .65f},
+                    flameSize * (.4f + ring * .12f),
+                    Fade(ORANGE, .025f * strength));
     }
-    y += 84;
+    // An emoji-style flame drawn with native shapes stays crisp at any scale.
+    auto flame = [](float left, float top, float scale, Color outer, Color inner) {
+      const Vector2 outline[] = {{58,0},{68,28},{79,19},{94,50},{97,70},
+          {86,90},{63,100},{35,98},{13,84},{5,64},{12,43},{29,20},{31,49},{45,33}};
+      const Vector2 center{left + scale * .5f, top + scale * .7f};
+      for (int i = 0; i < 14; ++i) {
+        const auto a = outline[i], b = outline[(i + 1) % 14];
+        DrawTriangle(center, {left + b.x * scale / 100, top + b.y * scale / 100},
+                     {left + a.x * scale / 100, top + a.y * scale / 100}, outer);
+      }
+      DrawEllipse(static_cast<int>(left + scale * .51f),
+                  static_cast<int>(top + scale * .78f), scale * .21f, scale * .2f, inner);
+      DrawTriangle({left + scale * .3f, top + scale * .78f},
+                   {left + scale * .72f, top + scale * .78f},
+                   {left + scale * .57f, top + scale * .39f}, inner);
+    };
+    flame(flameX, flameY, flameSize,
+          streak ? Color{255, 91, 30, 255} : Color{173, 185, 201, 255},
+          streak ? Color{255, 214, 75, 255} : Color{215, 224, 235, 255});
+    text(std::to_string(streak), x + 106, y + 3, 46,
+         streak ? Color{222, 76, 20, 255} : muted);
+    text("day streak", x + 106, y + 57, 18, ink);
+    y += 104;
+    paragraph(app.profile.studyDays.count(today)
+                  ? "You're on fire! Today's learning goal is complete."
+                  : streak ? "Keep your flame alive. Solve a question today."
+                           : "Light your first flame. Solve one question today.",
+              muted, 16);
+    y += 12;
     if (!app.profile.lesson.empty()) {
       for (int l = 0; l < static_cast<int>(lessons.size()); l++)
         if (lessons[l].id == app.profile.lesson) {
