@@ -1,4 +1,6 @@
-# Working executable — 6 November 2026
+# Working executable
+
+Current delivery status: 10 November 2026. Four lessons, twelve questions, 36 authored hints, course workspace and version-three activity saves are integrated. Earlier dated increments below retain their historical counts; the final partner-first delivery entry describes the current integration.
 
 ## Delivered
 
@@ -112,3 +114,11 @@ The assistant supports typed messages and quick prompts, with a bounded independ
 Validation: Release build, all four CTest suites and make test passed. Geometry tests cover centre minimum width and non-overlapping side panes at 960, 1280 and 1600. New standard/compact course scenarios open both tracks, switch modules, grade C/C++ answers, send an assistant message, verify help without an answer attempt, then reset and verify conversations/evidence are cleared. Smoke, guided progression, review, code scrolling, undo/redo and four separate restart phases passed. Standard/compact catalogue, material and assistant renders were inspected. Signature verification and git diff --check passed. The refreshed ZIP was extracted and its course scenario was run outside the repository.
 
 Primary signal is met for automated course navigation, authored assistance and profile-reset isolation. Native OS keyboard/clipboard testing and learner usability testing remain pending. The assistant uses authored responses, not live AI; provider integration remains a separate prerequisite. Module navigation fits the current three-lesson catalogue; scrolling that list is needed before the full 14-lesson curriculum is delivered. No snapshot-format, dependency or grading change was required.
+
+## Partner-first merge and delivery — 10 November 2026
+
+Oleksandr's PR #3 was reviewed, built and tested separately, then merged first into main as 8e8bb34. Integration into this branch exposed real conflicts in main.cpp and sample_content.cpp. Commit be30d1a resolves them by retaining the course catalogue/three-panel interface and authored variables adapter, adding C conditions as the third C module, and preserving daily activity/streaks and version-three saves. Streak badge geometry was adapted to avoid the gear/navigation; module navigation now scrolls and reveals the selected module. Conditions questions have matching score-49 and height examples.
+
+Four CTest suites and make test passed after integration. Added explicit version-two-to-three upgrade/backup checks and malformed ACTIVITY bounds, duplicate and truncation fixtures, verifying original files remain unchanged. Conditions code compiled as C17 with warnings treated as errors and printed Retry at 49, Pass at 50 and 51. The integrated conditions and course journeys passed. The partner-only build also passed both tests, make test and uncaptured smoke/guided journeys, resolving the previously reported uncaptured-smoke concern in this environment. Physical input/other-Mac testing and human acceptance of the inactive flame styling remain pending.
+
+The three-hour development journal for Tymofii is under docs/journals, with Markdown source and a visually verified Word copy matching the earlier journal format. Hours are self-reported, not measured. Older untracked 6 November journal files were left outside the delivery commits.
