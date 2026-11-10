@@ -61,8 +61,8 @@ Default progress location: `~/Library/Application Support/CWaypoint`. Use `--dat
 
 ## Integration
 
-`src/core.hpp` defines the lesson, question, walkthrough, evaluation and profile contracts. `src/sample_content.cpp` contains the replaceable starter records. Oleksandr can extend the catalogue and evaluator without changing screen-specific correctness logic. See [docs/content-contracts.md](docs/content-contracts.md).
+`src/core.hpp` defines the lesson, question, walkthrough, evaluation and profile contracts. `src/sample_content.cpp` assembles the starter catalogue. The variables entry comes from Oleksandr’s authored `src/learning/lesson.cpp` through the validated `src/lesson_adapter.cpp`; the other starter records remain local. Oleksandr can extend the catalogue and evaluator without changing screen-specific correctness logic. See [docs/content-contracts.md](docs/content-contracts.md).
 
 ## Oleksandr's first learning core
 
-The first authored C variables lesson and evaluator are also available as a standalone C++17 handoff in `src/learning/`. Run `make test` to verify that evaluator and compile-check its C example; run `make demo` for a terminal demonstration. See [integration notes](docs/integration.md) and [Friday record](docs/friday-2026-11-06.md). The raylib app currently uses the starter catalogue in `src/sample_content.cpp`; adapting this separate handoff into that catalogue is follow-up integration work.
+The first authored C variables lesson and evaluator are also available as a standalone C++17 handoff in `src/learning/`. Run `make test` to verify that evaluator and compile-check its C example; run `make demo` for a terminal demonstration. See [integration notes](docs/integration.md) and [Friday record](docs/friday-2026-11-06.md). The raylib app now consumes that authored variables lesson through a bounded adapter. Its application assessment revision is 2, so earlier question evidence does not count as completion of the revised assessment. Run the executable with `--data-dir <isolated-folder> --authored-test` to verify the integrated handler journey; add `--compact` for the minimum window size.
