@@ -12,6 +12,7 @@ int main() {
   require(lesson.id == "c-variables" && lesson.revision == 2, "stable application identity and new revision");
   require(lesson.title == source.title && lesson.body == source.explanation && lesson.code == source.code, "authored teaching text retained");
   require(validate({lesson}).empty(), "adapted lesson contract");
+  require(lesson.questions[2].code.find("int b = a;") != std::string::npos, "fresh check has matching code context");
   require(validateWalkthrough(lesson.steps).empty(), "existing walkthrough retained");
   for (size_t i=0;i<3;++i) {
    const auto &q=lesson.questions[i]; const auto &e=source.exercises[i];

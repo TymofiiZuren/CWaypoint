@@ -2,7 +2,7 @@
 #include "lesson_adapter.hpp"
 namespace cw {
 std::vector<Lesson> sampleLessons() {
-  return {
+  std::vector<Lesson> lessons{
       adaptVariablesLesson(cwaypoint::variablesLesson()),
       {"cpp-strings",
        "C++",
@@ -89,6 +89,9 @@ std::vector<Lesson> sampleLessons() {
         {"*p = 12;", "value = 12 | p -> value (A)",
          "Dereferencing p accesses value. This assignment updates that "
          "integer."}}}};
+  lessons[1].questions[2].code = "std::string s = \"cat\";\ns = s + \"s\";";
+  lessons[2].questions[2].code = "int x = 4;\nint *q = &x;\n*q = *q + 1;";
+  return lessons;
 }
 std::vector<Comparison> comparisons() {
   return {{"Writing output", "printf(\"%d\\n\", score);",

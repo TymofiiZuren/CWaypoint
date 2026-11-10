@@ -267,6 +267,7 @@ int main() {
       std::filesystem::create_directory(failing / "generation-1.save.tmp");
       check(!c.help(0, 2),
             "no hint displayed before failed assistance barrier");
+      check(c.unsavedChanges, "save failure is structured UI state");
       check(c.submit(0, 2, lessons[0].questions[2].answer).kind ==
                 Verdict::Invalid,
             "no result displayed before failed save");
@@ -279,6 +280,7 @@ int main() {
       std::filesystem::rename(failing / "generation-1.save.tmp",
                               failing / "blocked-write-fixture");
       check(c.save(), "retry save persists pending result");
+      check(!c.unsavedChanges, "save recovery clears structured UI state");
       Controller restored(lessons, store);
       check(restored.profile.evidence.at("c-var-fresh").attempts == 1 &&
                 restored.solved(0, 2),

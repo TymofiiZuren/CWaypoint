@@ -1,6 +1,7 @@
 #include "core.hpp"
 #include "learning/lesson.hpp"
 #include "text_input.hpp"
+#include "ui_layout.hpp"
 #include <algorithm>
 #include <cmath>
 #include <cstdlib>
@@ -11,9 +12,11 @@
 #include <vector>
 using namespace cw;
 namespace {
-const Color paper{247, 249, 252, 255}, ink{25, 42, 64, 255},
-    muted{79, 96, 116, 255}, blue{27, 86, 177, 255}, pale{230, 238, 250, 255},
-    line{215, 224, 235, 255}, green{25, 107, 77, 255}, red{166, 52, 43, 255};
+// Charcoal study palette; opaque token pairs are contrast-tested.
+const Color paper{16, 19, 24, 255}, ink{232, 237, 245, 255},
+    muted{168, 179, 196, 255}, blue{168, 180, 255, 255}, pale{43, 51, 72, 255},
+    line{113, 128, 150, 255}, green{117, 214, 160, 255}, red{255, 154, 154, 255},
+    surface{25, 30, 38, 255}, raised{36, 44, 56, 255};
 enum class Screen {
   Home,
   Catalogue,
@@ -38,12 +41,14 @@ struct UI {
   std::map<std::string, int> practicePosition;
   float answerOffset = 0;
   bool selectingAnswer = false;
+  int answerWidget = -1;
   TextInput &draft() { return drafts[lessons[lesson].questions[question].id]; }
   Verdict verdict = Verdict::Invalid;
   float scroll = 0, maxScroll = 0, y = 0, x = 0, width = 0;
-  std::map<std::string, float> codeOffsets;
+  std::map<std::string, float> codeOffsets, panelHeights;
   std::string currentScope, automaticScope, copiedCode, copiedText;
   double copiedUntil = 0;
+  bool menuOpen = false, menuJustOpened = false, helpOpen = false, keyboardHelp = false;
   bool inContent = false, blockedFresh = false, reviewMode = false;
   std::string reviewTrack;
   std::string automaticAction;
@@ -104,8 +109,8 @@ struct UI {
     y += 12;
   }
   void title(const std::string &s, const std::string &sub = "") {
-    text(s, x, y, 32);
-    y += 48;
+    text(s, x, y, 26);
+    y += 38;
     if (!sub.empty())
       paragraph(sub);
     y += 8;
@@ -119,25 +124,25 @@ struct UI {
   }
   bool hit(Rectangle r, Vector2 point) {
     if (inContent &&
-        (point.x < 224 || point.y < 100 || point.y >= GetScreenHeight() - 58))
+        (!contentHit(workspaceLayout(GetScreenWidth(), GetScreenHeight()), point.x, point.y) || menuOpen))
       return false;
     return CheckCollisionPointRec(point, r);
   }
   bool visible(Rectangle r) {
-    return !inContent || (r.y + r.height > 100 && r.y < GetScreenHeight() - 58);
+    return !inContent || (r.y + r.height > 88 && r.y < GetScreenHeight() - 48);
   }
   bool button(const std::string &label, Rectangle r, bool primary = false,
-              bool enabled = true) {
+              bool enabled = true, bool showLabel = true) {
     int id = -1;
     if (enabled)
       id = widgets++;
     bool hot = enabled && visible(r) && hit(r, GetMousePosition());
     bool selected = enabled && id == focus;
-    Color bg = primary ? blue : WHITE;
+    Color bg = primary ? blue : raised;
     if (hot)
-      bg = primary ? Color{20, 69, 147, 255} : pale;
+      bg = primary ? Color{190, 199, 255, 255} : pale;
     if (!enabled)
-      bg = Color{234, 238, 243, 255};
+      bg = Color{32, 38, 48, 255};
     DrawRectangleRounded(r, 0.16f, 8, bg);
     if (!primary)
       DrawRectangleRoundedLinesEx(r, 0.16f, 8, 1, line);
@@ -153,12 +158,12 @@ struct UI {
     float fs = 17;
     while (fs > 13 && measure(label, fs) > r.width - 24)
       fs -= 1;
-    text(label, r.x + 16, r.y + (r.height - fs) / 2, fs,
+    if (showLabel) text(label, r.x + 16, r.y + (r.height - fs) / 2, fs,
          !enabled  ? muted
-         : primary ? WHITE
+         : primary ? paper
                    : ink);
     bool clicked = hot && IsMouseButtonPressed(MOUSE_BUTTON_LEFT);
-    bool key = !actionUsed && selected &&
+    bool key = enabled && !(inContent && menuOpen) && !actionUsed && selected &&
                (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) &&
                !answerFocus;
     bool scripted = enabled && !automaticAction.empty() &&
@@ -185,6 +190,8 @@ struct UI {
     if (screen == Screen::Catalogue)
       catalogueScroll[track] = scroll;
     screen = next;
+    menuOpen = false;
+    keyboardHelp = false;
     reviewMode = false;
     scroll = next == Screen::Catalogue ? catalogueScroll[track] : 0;
     maxScroll = scroll;
@@ -194,6 +201,7 @@ struct UI {
     resetConfirm = false;
   }
   void clearQuestion() {
+    helpOpen = false;
     answerOffset = 0;
     selectingAnswer = false;
     feedback.clear();
@@ -246,7 +254,7 @@ struct UI {
     }
   }
   void code(const std::string &s, const std::string &key,
-            const std::string &caption = "Example code") {
+            const std::string &caption = "Example code", bool compactCode = false) {
     std::vector<std::string> rows;
     std::string row;
     for (char ch : s) {
@@ -265,6 +273,7 @@ struct UI {
     offset = std::clamp(offset, 0.f, maximum);
     currentScope = key;
     text(caption, x, y + 10, 16, muted);
+    if (!compactCode || maximum > 0) y += 36;
     if (maximum > 0) {
       if (button("Scroll left", {x + width - 374, y, 110, 36}))
         offset = std::max(0.f, offset - 120);
@@ -281,7 +290,7 @@ struct UI {
       copiedUntil = GetTime() + 1.5;
     }
     y += 44;
-    const float h = rows.size() * (size() * 1.5f) + 32;
+    const float h = rows.size() * (size() * 1.5f) + (compactCode ? 16 : 32);
     Rectangle r{x, y, width, h};
     int id = widgets++;
     if (hit(r, GetMousePosition()) && visible(r) &&
@@ -290,7 +299,7 @@ struct UI {
       answerFocus = false;
       tabbing = false;
     }
-    bool selected = id == focus && !answerFocus;
+    bool selected = id == focus && !answerFocus && !menuOpen;
     if (selected && tabbing && (r.y < 108 || r.y > GetScreenHeight() - 110))
       scroll = std::max(0.f, scroll + r.y - 108);
     auto repeat = [](int key) {
@@ -317,22 +326,22 @@ struct UI {
     if (hit(r, GetMousePosition()) &&
         (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)))
       offset = std::clamp(offset - GetMouseWheelMove() * 30, 0.f, maximum);
-    DrawRectangleRounded(r, .08f, 8, Color{235, 240, 247, 255});
+    DrawRectangleRounded(r, .08f, 8, raised);
     if (selected)
       DrawRectangleRoundedLinesEx(r, .08f, 8, 2, blue);
     EndScissorMode();
-    float top = std::max(y, 100.f),
-          bottom = std::min(y + h, static_cast<float>(GetScreenHeight() - 58));
+    float top = std::max(y, 88.f),
+          bottom = std::min(y + h, static_cast<float>(GetScreenHeight() - 48));
     BeginScissorMode(static_cast<int>(x + 12), static_cast<int>(top),
                      static_cast<int>(width - 24),
                      static_cast<int>(std::max(0.f, bottom - top)));
-    float cy = y + 16;
+    float cy = y + (compactCode ? 8 : 16);
     for (const auto &item : rows) {
       text(item, x + 16 - offset, cy, size(), ink, true);
       cy += size() * 1.5f;
     }
     EndScissorMode();
-    BeginScissorMode(224, 100, GetScreenWidth() - 224, GetScreenHeight() - 158);
+    BeginScissorMode(16, 88, GetScreenWidth() - 32, GetScreenHeight() - 136);
     y += h + 12;
     if (maximum > 0) {
       float trackWidth = width,
@@ -353,7 +362,8 @@ struct UI {
     auto &editor = draft();
     const auto previousText = editor.value();
     int id = widgets++;
-    bool active = id == focus && answerFocus;
+    answerWidget = id;
+    bool active = id == focus && answerFocus && !menuOpen;
     bool shift = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
     bool command = IsKeyDown(KEY_LEFT_SUPER) || IsKeyDown(KEY_RIGHT_SUPER);
     bool control = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
@@ -385,7 +395,7 @@ struct UI {
       selectingAnswer = false;
     if (active && selectingAnswer && IsMouseButtonDown(MOUSE_BUTTON_LEFT))
       editor.moveTo(caretAtMouse(), true);
-    if (id == focus && tabbing) {
+    if (id == focus && tabbing && !menuOpen) {
       if (r.y < 108)
         scroll = std::max(0.f, scroll + r.y - 108);
       else if (r.y + r.height > GetScreenHeight() - 70)
@@ -393,7 +403,7 @@ struct UI {
       answerFocus = true;
       active = true;
     }
-    DrawRectangleRounded(r, .12f, 8, WHITE);
+    DrawRectangleRounded(r, .12f, 8, raised);
     DrawRectangleRoundedLinesEx(r, .12f, 8, active ? 2 : 1,
                                 active ? blue : line);
     if (active) {
@@ -463,7 +473,7 @@ struct UI {
       answerOffset = caretX - width + 40;
     const float top = std::max(y + 6, 100.f),
                 bottom = std::min(y + 44,
-                                  static_cast<float>(GetScreenHeight() - 58));
+                                  static_cast<float>(GetScreenHeight() - 48));
     EndScissorMode();
     BeginScissorMode(static_cast<int>(x + 12), static_cast<int>(top),
                      static_cast<int>(width - 24),
@@ -483,8 +493,19 @@ struct UI {
       DrawRectangle(static_cast<int>(x + 16 + caretX - answerOffset),
                     static_cast<int>(y + 12), 2, 26, blue);
     EndScissorMode();
-    BeginScissorMode(224, 100, GetScreenWidth() - 224, GetScreenHeight() - 158);
+    BeginScissorMode(16, 88, GetScreenWidth() - 32, GetScreenHeight() - 136);
     y += 62;
+    if (editor.value() != previousText && !feedback.empty() &&
+        verdict != Verdict::Invalid) {
+      feedback = "Draft changed. The previous learning result is unchanged; "
+                 "choose Try "
+                 "again before checking a new answer.";
+      verdict = Verdict::Invalid;
+    }
+  }
+  void editingControls() {
+    auto &editor = draft();
+    const int inputId = answerWidget;
     bool editAction = false;
     if (button("Undo", {x, y, 100, 36}, false, editor.canUndo())) {
       editor.undo();
@@ -496,53 +517,85 @@ struct UI {
     }
     text("Command+Z / Shift+Command+Z", x + 232, y + 10, 14, muted);
     if (editAction) {
-      focus = id;
+      if (!feedback.empty() && verdict != Verdict::Invalid) {
+        feedback = "Draft changed. The previous result is unchanged; choose Try again before checking.";
+        verdict = Verdict::Invalid;
+      }
+      focus = inputId;
       answerFocus = true;
       tabbing = false;
     }
-    if (editor.value() != previousText && !feedback.empty() &&
-        verdict != Verdict::Invalid) {
-      feedback = "Draft changed. The previous learning result is unchanged; "
-                 "choose Try "
-                 "again before checking a new answer.";
-      verdict = Verdict::Invalid;
-    }
-    y += 56;
+    y += 48;
   }
-  void sidebar() {
-    DrawRectangle(0, 0, 224, GetScreenHeight(), Color{238, 243, 249, 255});
-    DrawLine(223, 0, 223, GetScreenHeight(), line);
-    text("CWaypoint", 28, 32, 26, blue);
-    text("Learn by working it out.", 28, 68, 15, muted);
-    struct Nav {
-      const char *label;
-      Screen target;
-    };
-    std::vector<Nav> nav{{"Home", Screen::Home},
-                         {"Lessons", Screen::Catalogue},
-                         {"Progress", Screen::Progress},
-                         {"Review mistakes", Screen::Review},
-                         {"C / C++ comparisons", Screen::Compare},
-                         {"Settings", Screen::Settings}};
-    float ny = 136;
+  void panel(Rectangle r) {
+    float roundness = std::min(1.f, 32.f / std::min(r.width, r.height));
+    DrawRectangleRounded(r, roundness, 12, surface);
+    DrawRectangleRoundedLinesEx(r, roundness, 12, 1, Color{50, 61, 78, 255});
+  }
+  void logo(float px, float py, float scale = 1) {
+    Rectangle r{px, py, 40 * scale, 40 * scale};
+    DrawRectangleRounded(r, .35f, 12, blue);
+    text("C", px + 9 * scale, py + 7 * scale, 26 * scale, paper);
+    DrawCircle(static_cast<int>(px + 31 * scale),
+               static_cast<int>(py + 30 * scale), 3 * scale, paper);
+  }
+  void sidebar() { // The shared navigation entry point now draws the top bar.
+    DrawRectangle(0, 0, GetScreenWidth(), 80, surface);
+    DrawLine(0, 79, GetScreenWidth(), 79, Color{50, 61, 78, 255});
+    if (button("Home", {24, 16, 192, 48}, false, true, false))
+      go(Screen::Home);
+    DrawRectangleRounded({24,16,192,48}, .25f, 8,
+                         screen == Screen::Home ? pale : surface);
+    if (tabbing && focus == 0)
+      DrawRectangleRoundedLinesEx({24,16,192,48}, .25f, 8, 2, blue);
+    logo(28,20);
+    text("CWaypoint", 80, 31, 21, ink);
+    struct Nav { const char *label; const char *display; Screen target; };
+    const Nav nav[] = {{"Lessons", "Lessons", Screen::Catalogue},
+      {"Review mistakes", "Review", Screen::Review},
+      {"Progress", "Progress", Screen::Progress},
+      {"C / C++ comparisons", "Compare", Screen::Compare}};
+    float nx = 236;
     for (auto n : nav) {
       bool selected = screen == n.target ||
-                      (n.target == Screen::Catalogue &&
-                       screen == Screen::Lesson && !reviewMode) ||
-                      (n.target == Screen::Review && reviewMode);
-      if (button(n.label, {16, ny, 192, 46}, selected))
+        (n.target == Screen::Catalogue && screen == Screen::Lesson && !reviewMode) ||
+        (n.target == Screen::Review && reviewMode);
+      // Keep action identity independent of the shorter navigation label.
+      if (button(n.label, {nx, 18, 132, 44}, false, true, false))
         go(n.target);
-      ny += 58;
+      DrawRectangleRounded({nx,18,132,44}, .25f, 8, selected ? pale : surface);
+      text(n.display, nx + 16, 32, 17, selected ? blue : muted);
+      if (selected) DrawRectangle(nx + 16, 65, 34, 2, blue);
+      if (tabbing && focus == widgets - 1)
+        DrawRectangleRoundedLinesEx({nx,18,132,44}, .25f, 8, 2, blue);
+      nx += 140;
     }
-    text("Offline learning", 28, GetScreenHeight() - 100, 16, green);
-    text("3 starter lessons", 28, GetScreenHeight() - 72, 15, muted);
-    DrawCircle(30, GetScreenHeight() - 123, 4, green);
+    Rectangle gear{static_cast<float>(GetScreenWidth() - 72),18,48,44};
+    if (button("Settings", gear, false, true, false)) {
+      menuOpen = !menuOpen; menuJustOpened = menuOpen; answerFocus = false;
+    }
+    DrawRectangleRounded(gear, .3f, 8, menuOpen ? pale : raised);
+    Vector2 center{gear.x + 24, gear.y + 22};
+    DrawRing(center, 7, 10, 0, 360, 24, ink);
+    for (int i = 0; i < 8; ++i) {
+      float a = i * PI / 4;
+      DrawLineEx({center.x + std::cos(a)*9, center.y + std::sin(a)*9},
+                 {center.x + std::cos(a)*14, center.y + std::sin(a)*14}, 3, ink);
+    }
+    if (tabbing && focus == widgets - 1)
+      DrawRectangleRoundedLinesEx(gear, .3f, 8, 2, blue);
+    if (CheckCollisionPointRec(GetMousePosition(), gear))
+      text("Settings", gear.x - 16, 68, 14, ink);
   }
   void begin() {
     widgets = 0;
     actionUsed = false;
     SetMouseCursor(MOUSE_CURSOR_DEFAULT);
-    if (IsKeyPressed(KEY_TAB)) {
+    if (IsKeyPressed(KEY_TAB) && menuOpen) {
+      focus = focus == lastWidgets - 2 ? lastWidgets - 1 : lastWidgets - 2;
+      tabbing = true;
+      answerFocus = false;
+    } else if (IsKeyPressed(KEY_TAB)) {
       focus = (focus + (IsKeyDown(KEY_LEFT_SHIFT) ? -1 : 1) +
                std::max(1, lastWidgets)) %
               std::max(1, lastWidgets);
@@ -550,7 +603,10 @@ struct UI {
       answerFocus = false;
     }
     if (IsKeyPressed(KEY_ESCAPE)) {
-      if (resetConfirm)
+      if (menuOpen) {
+        menuOpen = false;
+        focus = 5;
+      } else if (resetConfirm)
         resetConfirm = false;
       else if (screen == Screen::Lesson)
         go(reviewMode ? Screen::Review : Screen::Catalogue);
@@ -560,19 +616,7 @@ struct UI {
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
       tabbing = false;
     sidebar();
-    std::string context =
-        screen == Screen::Lesson
-            ? lessons[lesson].track + " / " + lessons[lesson].title
-        : screen == Screen::Catalogue ? "Your learning path"
-        : screen == Screen::Compare   ? "Language comparisons"
-        : screen == Screen::Progress  ? "Your progress"
-        : screen == Screen::Review    ? "Review mistakes"
-        : screen == Screen::Settings  ? "Preferences"
-                                      : "Welcome to CWaypoint";
-    text(context, 264, 38, 19, muted);
-    text("C++17 + raylib", GetScreenWidth() - 174, 40, 15, muted);
-    DrawLine(224, 90, GetScreenWidth(), 90, line);
-    if (!IsKeyDown(KEY_LEFT_SHIFT) && !IsKeyDown(KEY_RIGHT_SHIFT))
+    if (!menuOpen && !IsKeyDown(KEY_LEFT_SHIFT) && !IsKeyDown(KEY_RIGHT_SHIFT))
       scroll = std::clamp(scroll - GetMouseWheelMove() * 48, 0.f, maxScroll);
     if (!answerFocus) {
       if (IsKeyPressed(KEY_PAGE_DOWN))
@@ -580,11 +624,13 @@ struct UI {
       if (IsKeyPressed(KEY_PAGE_UP))
         scroll = std::max(0.f, scroll - 400);
     }
-    x = 264;
-    width = std::min(900.f, static_cast<float>(GetScreenWidth()) - 304);
-    y = 122 - scroll;
+    auto layout = workspaceLayout(GetScreenWidth(), GetScreenHeight());
+    x = layout.x;
+    width = layout.width;
+    y = layout.top - scroll;
+    panel({x - 16, 92, width + 32, static_cast<float>(GetScreenHeight() - 152)});
     inContent = true;
-    BeginScissorMode(224, 100, GetScreenWidth() - 224, GetScreenHeight() - 158);
+    BeginScissorMode(16, 88, GetScreenWidth() - 32, GetScreenHeight() - 136);
   }
   void end() {
     maxScroll =
@@ -599,20 +645,32 @@ struct UI {
                     104 + static_cast<int>((h - thumb) * scroll / maxScroll), 4,
                     static_cast<int>(thumb), line);
     }
-    DrawRectangle(224, GetScreenHeight() - 58, GetScreenWidth() - 224, 58,
-                  paper);
-    DrawLine(224, GetScreenHeight() - 58, GetScreenWidth(),
-             GetScreenHeight() - 58, line);
-    std::string status =
-        app.notice.empty() ? "Ready for offline learning" : app.notice;
-    float statusWidth = GetScreenWidth() - 530;
-    auto lines = wrap(status, statusWidth, 14);
-    text(lines[0], 248, GetScreenHeight() - 37, 14,
-         store.writable() ? muted : red);
-    if (button("Retry save",
-               {static_cast<float>(GetScreenWidth() - 150),
-                static_cast<float>(GetScreenHeight() - 48), 126, 36}))
-      app.save();
+    DrawRectangle(0, GetScreenHeight() - 48, GetScreenWidth(), 48, paper);
+    const std::string status = app.notice.empty() ? "Offline learning" : app.notice;
+    const bool saveProblem = !store.writable() || app.unsavedChanges;
+    auto lines = wrap(status, GetScreenWidth() - (saveProblem ? 190.f : 64.f), 14);
+    text(saveProblem ? "Progress needs attention. Open save details." : lines[0],
+         32, GetScreenHeight() - 31, 14, saveProblem ? red : muted);
+    if (saveProblem && button("Save details",
+        {static_cast<float>(GetScreenWidth()-156), static_cast<float>(GetScreenHeight()-43),124,38}))
+      go(Screen::Settings);
+    if (menuOpen) {
+      const Rectangle menu{static_cast<float>(GetScreenWidth()-280),80,256,128};
+      const bool dismiss = IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
+          !CheckCollisionPointRec(GetMousePosition(),menu) && !actionUsed;
+      panel(menu);
+      if (menuJustOpened) { focus = widgets; menuJustOpened = false; }
+      if (button("Preferences", {menu.x+12,menu.y+12,232,44})) {
+        menuOpen = false;
+        go(Screen::Settings);
+      }
+      if (button("Keyboard help", {menu.x+12,menu.y+68,232,44})) {
+        menuOpen = false;
+        go(Screen::Settings);
+        keyboardHelp = true;
+      }
+      if (dismiss) { menuOpen = false; focus = 5; }
+    }
     lastWidgets = widgets;
     focus = std::clamp(focus, 0, std::max(0, widgets - 1));
   }
@@ -630,9 +688,10 @@ struct UI {
       openLesson(next);
   }
   void home() {
-    title("Small steps. Strong foundations.",
-          "Read a clear example, predict what happens, and learn from the "
-          "result. Your progress stays on this Mac.");
+    logo(x, y, 1.5f);
+    text("CWaypoint", x + 80, y + 4, 34);
+    text("Learn C and C++", x + 80, y + 46, 18, muted);
+    y += 100;
     if (!app.profile.lesson.empty()) {
       for (int l = 0; l < static_cast<int>(lessons.size()); l++)
         if (lessons[l].id == app.profile.lesson) {
@@ -659,25 +718,10 @@ struct UI {
     y += 24;
     suggestion(track);
     y += 16;
-    heading("Understand it, then try it");
-    paragraph(
-        "Each lesson has a short explanation, two practice questions and a "
-        "separate fresh check. Use hints whenever you need them; independent "
-        "first attempts and supported practice are recorded separately.");
-    DrawLine(static_cast<int>(x), static_cast<int>(y),
-             static_cast<int>(x + width), static_cast<int>(y), line);
-    y += 28;
-    heading("Built for offline practice");
-    paragraph("Three starter lessons make this application usable today: C "
-              "variables, C pointers and C++ strings. Oleksandr's full "
-              "14-lesson curriculum and optional AI integration will connect "
-              "through the shared content contract.");
-    if (rowButton("Explore lessons", false, true, 220))
-      go(Screen::Catalogue);
-    y += 14;
-    paragraph("Keyboard: Tab to move, Enter or Space to activate, Page Up / "
-              "Down to scroll, Escape to go back.",
-              muted, 16);
+    heading("A little practice, a clearer idea");
+    paragraph("Read an example, predict the result, then check your answer. "
+              "Your progress stays on this Mac.");
+    if (rowButton("Review mistakes", false, true, 220)) go(Screen::Review);
   }
   void switchTrack(const std::string &next) {
     if (track == next)
@@ -719,7 +763,7 @@ struct UI {
     const auto &l = lessons[lesson];
     if (stage == 1)
       practicePosition[l.id] = question;
-    title(l.title, l.objective);
+    title(l.title);
     const std::array<std::string, 4> tabs{"Read", "Practice", "Fresh check",
                                           "Summary"};
     float bw = (width - 24) / 4;
@@ -733,7 +777,7 @@ struct UI {
         savePosition();
         blockedFresh = stage == 2 && !app.issue(lesson, 2);
       }
-    y += 68;
+    y += 58;
     if (stage == 0) {
       paragraph(l.body);
       code(l.code, l.id + ":example");
@@ -808,8 +852,28 @@ struct UI {
                   "correct attempt without help is recorded as independent.",
                   muted, 16);
       const auto &q = l.questions[question];
-      heading(q.prompt);
-      code(l.code, l.id + ":example");
+      const std::string &questionCode = q.code.empty() ? l.code : q.code;
+      const float fullX = x, fullWidth = width, questionTop = y;
+      const auto layout = workspaceLayout(GetScreenWidth(), GetScreenHeight());
+      float codeBottom = y;
+      const std::string panelKey = q.id + ":" + std::to_string(static_cast<int>(width)) + ":" + std::to_string(size());
+      if (layout.columns) {
+        width = layout.codeWidth - 32;
+        panel({x, y, layout.codeWidth, 300});
+        x += 16;
+        y += 16;
+        code(questionCode, l.id + ":example");
+        codeBottom = y;
+        x = fullX + layout.codeWidth + 24 + 16;
+        width = layout.answerWidth - 32;
+        y = questionTop + 16;
+        panel({x - 16, questionTop, width + 32,
+               panelHeights.count(panelKey) ? panelHeights.at(panelKey) : 700.f});
+        heading(q.prompt);
+      } else {
+        heading(q.prompt);
+        code(questionCode, l.id + ":example", "Question code", true);
+      }
       if (q.type == QuestionType::Choice) {
         for (const auto &choice : q.choices) {
           bool selected = draft().value() == choice;
@@ -825,28 +889,32 @@ struct UI {
                   muted, 16);
         input();
       }
-      if (button("Check answer", {x, y, 180, 46}, true)) {
+      if (button("Check answer", {x, y, 180, 46}, verdict == Verdict::Invalid)) {
         auto result = app.submit(lesson, question, draft().value());
         feedback = result.message;
         verdict = result.kind;
         answerFocus = false;
       }
-      if (button("Try again", {x + 196, y, 144, 46})) {
+      if (button("Try again", {x + 196, y, 144, 46}, verdict == Verdict::Incorrect)) {
         app.retry();
         feedback.clear();
         answerFocus = q.type != QuestionType::Choice;
       }
-      y += 68;
+      y += 58;
+      if (q.type != QuestionType::Choice) editingControls();
       if (!feedback.empty()) {
         paragraph(feedback, verdict == Verdict::Correct     ? green
                             : verdict == Verdict::Incorrect ? red
                                                             : muted);
         paragraph(app.status(lesson, question), muted, 16);
       }
-      heading("Need a little help?");
-      paragraph("Authored hints work offline. Opening a hint or revealing the "
-                "answer records help for this question.",
-                muted, 16);
+      if (automaticAction == "1. Concept" || automaticAction == "2. Guidance" ||
+          automaticAction == "3. Explanation" || automaticAction == "Reveal answer")
+        helpOpen = true;
+      if (rowButton(helpOpen ? "Hide hints" : "Get a hint", false, true, 180))
+        helpOpen = !helpOpen;
+      if (helpOpen) {
+      paragraph("Opening a hint or revealing the answer counts as help.", muted, 16);
       for (int i = 0; i < 3; i++)
         if (button(std::string(i == 0   ? "1. Concept"
                                : i == 1 ? "2. Guidance"
@@ -866,10 +934,7 @@ struct UI {
           verdict = Verdict::Invalid;
         }
       }
-      paragraph(
-          "AI hints are not configured. Offline hints are always available. "
-          "Provider integration belongs to Oleksandr's module.",
-          muted, 16);
+      }
       if (reviewMode) {
         auto remaining = app.reviewItems(reviewTrack);
         if (!app.profile.review.count(q.id))
@@ -889,14 +954,14 @@ struct UI {
         if (rowButton("Back to review list", false, true, 250))
           go(Screen::Review);
       } else if (stage == 1 && question == 0) {
-        if (rowButton("Next practice question", true, true, 260)) {
+        if (rowButton("Next practice question", app.solved(lesson, question), true, 260)) {
           question = 1;
           clearQuestion();
           scroll = 0;
           savePosition();
         }
       } else if (stage == 1) {
-        if (rowButton("Try the fresh check", true, true, 240)) {
+        if (rowButton("Try the fresh check", app.completed(lesson) == 2, true, 240)) {
           stage = 2;
           question = 2;
           clearQuestion();
@@ -909,6 +974,10 @@ struct UI {
         scroll = 0;
         savePosition();
       }
+      panelHeights[panelKey] = y - questionTop + 16;
+      y = std::max(y, codeBottom) + 16;
+      x = fullX;
+      width = fullWidth;
     } else {
       heading(app.completed(lesson) == 2 ? "Practice complete"
                                          : "Keep building your understanding");
@@ -1007,6 +1076,15 @@ struct UI {
     }
   }
   void settings() {
+    if (keyboardHelp) {
+      title("Keyboard shortcuts");
+      paragraph("Tab / Shift+Tab: move between controls. Enter or Space: activate. Escape: close the menu or return.");
+      paragraph("Answer editing: arrows move the caret; Shift selects; Command+A selects all. Command+C/X/V copy, cut and paste. Command+Z undoes; Shift+Command+Z redoes.");
+      paragraph("Page Up / Down scroll the page. Focus a code panel for Left / Right and Home / End, or use Shift + wheel to pan long lines.");
+      paragraph("Answers accept single-line ASCII text. Native VoiceOver and Unicode/IME input are not implemented.");
+      if (rowButton("Back to preferences", true, true, 240)) keyboardHelp = false;
+      return;
+    }
     title("Make room to learn",
           "Choose a comfortable reading size. Learning stays offline until a "
           "future AI integration is explicitly configured.");
@@ -1023,6 +1101,8 @@ struct UI {
     paragraph("Not configured. The application sends no network requests. "
               "Authored hints work at all three levels without credentials.");
     heading("Saved progress");
+    paragraph(app.notice.empty() ? store.status() : app.notice, store.writable() ? muted : red);
+    if (store.writable() && rowButton("Retry save", false, true, 180)) app.save();
     paragraph(store.writable()
                   ? "This profile is writable. Attempts, help, review items "
                     "and your resume point are saved locally."
@@ -1125,7 +1205,7 @@ int main(int argc, char **argv) {
     bool smoke = false, guided = false, reviewTest = false, codeTest = false,
          undoTest = false, authoredTest = false;
     int frames = 0;
-    bool compact = false;
+    bool compact = false, largeText = false;
     std::string resumeTest;
     std::string initial = "home";
     for (int i = 1; i < argc; i++) {
@@ -1146,6 +1226,8 @@ int main(int argc, char **argv) {
         capture = argv[++i];
       else if (arg == "--screen" && i + 1 < argc)
         initial = argv[++i];
+      else if (arg == "--large-text")
+        largeText = true;
       else if (arg == "--compact")
         compact = true;
       else if (arg == "--resume-test" && i + 1 < argc) {
@@ -1199,7 +1281,7 @@ int main(int argc, char **argv) {
       controller.submit(0, 0, "incorrect");
       controller.submit(1, 2, "incorrect");
     }
-    if (codeTest)
+    if (codeTest || largeText)
       controller.setTextSize(24);
     SetTraceLogLevel(LOG_WARNING);
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_WINDOW_HIGHDPI |
@@ -1261,7 +1343,11 @@ int main(int argc, char **argv) {
                  "Progress",
                  "C / C++ comparisons",
                  "Settings",
+                 "Preferences",
                  "Larger",
+                 "Settings",
+                 "Keyboard help",
+                 "Back to preferences",
                  "Home",
                  "Lessons"};
     if (guided)

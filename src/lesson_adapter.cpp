@@ -50,6 +50,7 @@ Lesson adaptVariablesLesson(const cwaypoint::Lesson &source) {
     }
     lesson.questions.push_back(question);
   }
+  lesson.questions[2].code = "int a = 4;\nint b = a;\na = 9;\nprintf(\"%d\\n\", b);";
   // This walkthrough describes this exact example; reject drift explicitly.
   require(source.code == "int score = 3;\nscore = score + 2;\nprintf(\"%d\\n\", score);");
   lesson.steps = {
