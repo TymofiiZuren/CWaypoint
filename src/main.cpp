@@ -2,6 +2,7 @@
 #include "streak_icon.hpp"
 #include "learning/lesson.hpp"
 #include "text_input.hpp"
+#include "keyboard_input.hpp"
 #include "ui_layout.hpp"
 #include <algorithm>
 #include <cmath>
@@ -36,6 +37,8 @@ struct UI {
   Controller &app;
   int lesson = 0, stage = 0, question = 0, walk = 0, compare = 0, hint = 0;
   int focus = 0, widgets = 0, lastWidgets = 0;
+  KeyboardModifiers modifiers{};
+  bool windowFocused = true;
   bool tabbing = false, answerFocus = false, resetConfirm = false;
   std::string track = "C", feedback;
   std::map<std::string, TextInput> drafts;
@@ -195,7 +198,7 @@ struct UI {
          : primary ? paper
                    : ink);
     bool clicked = hot && (injectedPointer || IsMouseButtonPressed(MOUSE_BUTTON_LEFT));
-    bool key = enabled && !((inContent || inCoursePanels) && menuOpen) && !actionUsed && selected &&
+    bool key = windowFocused && enabled && !((inContent || inCoursePanels) && menuOpen) && !actionUsed && selected &&
                (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) &&
                !answerFocus;
     bool scripted = !pointerHitTest && enabled && !automaticAction.empty() &&
@@ -350,8 +353,7 @@ struct UI {
         offset = 0;
       if (IsKeyPressed(KEY_END))
         offset = maximum;
-      if ((IsKeyDown(KEY_LEFT_SUPER) || IsKeyDown(KEY_RIGHT_SUPER) ||
-           IsKeyDown(KEY_LEFT_CONTROL)) &&
+      if ((modifiers.command || modifiers.control) &&
           IsKeyPressed(KEY_C)) {
         SetClipboardText(s.c_str());
         copiedCode = key;
@@ -360,7 +362,7 @@ struct UI {
       }
     }
     if (hit(r, GetMousePosition()) &&
-        (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT)))
+        modifiers.shift)
       offset = std::clamp(offset - GetMouseWheelMove() * 30, 0.f, maximum);
     DrawRectangleRounded(r, .08f, 8, raised);
     if (selected)
@@ -399,11 +401,11 @@ struct UI {
     const auto previousText = editor.value();
     int id = widgets++;
     answerWidget = id;
-    bool active = id == focus && answerFocus && !menuOpen && !chatFocus;
-    bool shift = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
-    bool command = IsKeyDown(KEY_LEFT_SUPER) || IsKeyDown(KEY_RIGHT_SUPER);
-    bool control = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
-    bool word = IsKeyDown(KEY_LEFT_ALT) || IsKeyDown(KEY_RIGHT_ALT) || control;
+    bool active = id == focus && answerFocus && !menuOpen && !chatFocus && windowFocused;
+    bool shift = modifiers.shift;
+    bool command = modifiers.command;
+    bool control = modifiers.control;
+    bool word = modifiers.alt || control;
     auto repeat = [](int key) {
       return IsKeyPressed(key) || IsKeyPressedRepeat(key);
     };
@@ -422,8 +424,9 @@ struct UI {
         IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
       focus = id;
       answerFocus = true;
+      chatFocus = false;
       tabbing = false;
-      active = true;
+      active = windowFocused;
       editor.moveTo(caretAtMouse(), shift);
       selectingAnswer = true;
     }
@@ -431,7 +434,7 @@ struct UI {
       selectingAnswer = false;
     if (active && selectingAnswer && IsMouseButtonDown(MOUSE_BUTTON_LEFT))
       editor.moveTo(caretAtMouse(), true);
-    if (id == focus && tabbing && !menuOpen) {
+    if (id == focus && tabbing && !menuOpen && windowFocused) {
       if (r.y < 108)
         scroll = std::max(0.f, scroll + r.y - 108);
       else if (r.y + r.height > GetScreenHeight() - 70)
@@ -445,7 +448,7 @@ struct UI {
     if (active) {
       int ch;
       while ((ch = GetCharPressed()) != 0)
-        if (!command && !control && ch >= 32 && ch < 127)
+        if (acceptTextCharacter(ch, modifiers))
           editor.insert(std::string(1, static_cast<char>(ch)));
       if ((command || control) && IsKeyPressed(KEY_Z)) {
         if (shift)
@@ -649,6 +652,18 @@ struct UI {
       text("Settings", gear.x - 16, 68, 14, ink);
   }
   void begin() {
+    windowFocused = IsWindowFocused();
+#ifdef __APPLE__
+    modifiers = currentKeyboardModifiers();
+#else
+    modifiers = {
+      IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT),
+      IsKeyDown(KEY_LEFT_SUPER) || IsKeyDown(KEY_RIGHT_SUPER),
+      IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL),
+      IsKeyDown(KEY_LEFT_ALT) || IsKeyDown(KEY_RIGHT_ALT)
+    };
+#endif
+    if (!windowFocused) selectingAnswer = false;
     widgets = 0;
     actionUsed = false;
     SetMouseCursor(MOUSE_CURSOR_DEFAULT);
@@ -658,7 +673,7 @@ struct UI {
       tabbing = true;
       answerFocus = false;
     } else if (IsKeyPressed(KEY_TAB)) {
-      focus = (focus + (IsKeyDown(KEY_LEFT_SHIFT) ? -1 : 1) +
+      focus = (focus + (modifiers.shift ? -1 : 1) +
                std::max(1, lastWidgets)) %
               std::max(1, lastWidgets);
       tabbing = true;
@@ -678,7 +693,7 @@ struct UI {
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
       tabbing = false;
     sidebar();
-    if (!menuOpen && (screen != Screen::Lesson || (GetMouseX() >= courseLayout(GetScreenWidth()).materialX && GetMouseX() < courseLayout(GetScreenWidth()).assistantX)) && !IsKeyDown(KEY_LEFT_SHIFT) && !IsKeyDown(KEY_RIGHT_SHIFT))
+    if (!menuOpen && (screen != Screen::Lesson || (GetMouseX() >= courseLayout(GetScreenWidth()).materialX && GetMouseX() < courseLayout(GetScreenWidth()).assistantX)) && !modifiers.shift)
       scroll = std::clamp(scroll - GetMouseWheelMove() * 48, 0.f, maxScroll);
     if (!answerFocus) {
       if (IsKeyPressed(KEY_PAGE_DOWN))
@@ -925,13 +940,13 @@ struct UI {
         focus=id; chatFocus=true; answerFocus=false;
       }
       if(tabbing && focus==id) { chatFocus=true; answerFocus=false; }
-      bool active=focus==id && chatFocus && !menuOpen;
+      bool active=focus==id && chatFocus && !menuOpen && windowFocused;
       DrawRectangleRounded(field,.15f,8,raised);
       DrawRectangleRoundedLinesEx(field,.15f,8,1,active?blue:line);
       if(active) {
-        bool command=IsKeyDown(KEY_LEFT_SUPER)||IsKeyDown(KEY_RIGHT_SUPER);
-        bool shift=IsKeyDown(KEY_LEFT_SHIFT)||IsKeyDown(KEY_RIGHT_SHIFT);
-        int ch; while((ch=GetCharPressed())!=0) if(!command && ch>=32 && ch<127 && chatDraft.value().size()<160) chatDraft.insert(std::string(1,static_cast<char>(ch)));
+        bool command=modifiers.command;
+        bool shift=modifiers.shift;
+        int ch; while((ch=GetCharPressed())!=0) if(acceptTextCharacter(ch,modifiers) && chatDraft.value().size()<160) chatDraft.insert(std::string(1,static_cast<char>(ch)));
         if(IsKeyPressed(KEY_BACKSPACE)||IsKeyPressedRepeat(KEY_BACKSPACE)) chatDraft.backspace();
         if(IsKeyPressed(KEY_LEFT)) chatDraft.move(-1,shift);
         if(IsKeyPressed(KEY_RIGHT)) chatDraft.move(1,shift);
@@ -1786,6 +1801,12 @@ int main(int argc, char **argv) {
         if(pointerTest)
           testOk=GetScreenWidth()>=1600 && controller.completed(0)==2 &&
             controller.solved(1,0) && ui.screen==Screen::Home && !ui.menuOpen;
+        if (pointerTest && !testOk)
+          std::cerr << "Pointer result: width=" << GetScreenWidth()
+                    << " C practice=" << controller.completed(0)
+                    << " C++ solved=" << controller.solved(1,0)
+                    << " screen=" << static_cast<int>(ui.screen)
+                    << " menu=" << ui.menuOpen << '\n';
         if(conditionsTest)
           testOk=controller.completed(3)==2 && controller.solved(3,2) &&
             controller.status(3,2)=="Solved independently on first attempt" &&
