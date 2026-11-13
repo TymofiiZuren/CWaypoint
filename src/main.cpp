@@ -1,5 +1,4 @@
 #include "core.hpp"
-#include "report.hpp"
 #include "streak_icon.hpp"
 #include "learning/lesson.hpp"
 #include "text_input.hpp"
@@ -42,8 +41,7 @@ struct UI {
   KeyboardModifiers modifiers{};
   bool windowFocused = true;
   bool tabbing = false, answerFocus = false, resetConfirm = false;
-  std::string track = "C", feedback, exportNotice;
-  bool exportFailed = false;
+  std::string track = "C", feedback;
   std::map<std::string, TextInput> drafts;
   std::map<std::string, float> catalogueScroll;
   std::map<std::string, int> practicePosition;
@@ -837,51 +835,59 @@ struct UI {
     maxScroll = scroll;
   }
   void catalogue() {
-    title("Your courses", "Choose a language. Learn one concept at a time.");
+    title("Your courses", "Build your C and C++ skills. Pick up where you left off.");
     if (!app.profile.lesson.empty()) {
-      for (int i = 0; i < static_cast<int>(lessons.size()); ++i)
+      for (int i=0; i<static_cast<int>(lessons.size()); ++i)
         if (lessons[i].id == app.profile.lesson) {
-          paragraph("Continue: " + lessons[i].title, ink, 16);
+          heading("Continue learning");
+          paragraph(lessons[i].track + " / " + lessons[i].title, ink, 18);
           if (rowButton("Continue lesson", true, true, 220))
             openLesson(i, app.profile.step, true);
+          y += 16;
         }
     }
-    const float startX = x, fullWidth = width, top = y;
-    const float cardWidth = (width - 24) / 2;
-    float bottom = y;
-    for (int c = 0; c < 2; ++c) {
-      const std::string language = c == 0 ? "C" : "C++";
-      x = startX + c * (cardWidth + 24);
-      y = top;
-      panel({x, y, cardWidth, 380});
-      DrawRectangleRounded({x+1,y+1,cardWidth-2,100}, .18f, 12,
-                           c == 0 ? Color{39,52,76,255} : Color{49,43,73,255});
-      text(language, x+24, y+28, 36, blue);
-      x += 24; y += 124; width = cardWidth - 48;
-      heading(c == 0 ? "C foundations" : "C++ foundations");
-      paragraph(c == 0 ? "Values, memory and the building blocks of C."
-                       : "Objects, strings and the language of modern C++.", muted, 16);
-      int count = 0, complete = 0, first = -1;
-      for (int i = 0; i < static_cast<int>(lessons.size()); ++i)
-        if (lessons[i].track == language) {
-          if (first < 0) first = i;
-          ++count; complete += app.completed(i) == 2;
+    const float pageX=x, fullWidth=width;
+    for (int c=0; c<2; ++c) {
+      const std::string language=c==0 ? "C" : "C++";
+      int count=0, complete=0, solved=0, first=-1;
+      std::string modules;
+      for (int i=0; i<static_cast<int>(lessons.size()); ++i)
+        if (lessons[i].track==language) {
+          if (first<0) first=i;
+          ++count; complete+=app.completed(i)==2; solved+=app.completed(i);
+          if (!modules.empty()) modules+="  /  ";
+          modules+=lessons[i].title;
         }
-      paragraph(std::to_string(count) + (count == 1 ? " available module  /  " : " available modules  /  ") +
-                std::to_string(complete) + " complete", muted, 16);
-      if (rowButton("Open " + language + " course", true, first >= 0, 220) ||
-          (!actionUsed && !menuOpen && first>=0 &&
-           hit({startX+c*(cardWidth+24),top,cardWidth,380},GetMousePosition()) &&
-           IsMouseButtonPressed(MOUSE_BUTTON_LEFT))) {
-        int next = app.nextLesson(language);
+      const float top=y;
+      DrawLineEx({pageX,top},{pageX+fullWidth,top},1,Color{50,61,78,255});
+      Rectangle cover{pageX,top+28,112,112};
+      DrawRectangleRounded(cover,.22f,12,c==0 ? Color{39,52,76,255} : Color{49,43,73,255});
+      text(language,cover.x+20,cover.y+36,c==0 ? 40 : 32,blue);
+      x=pageX+144; y=top+28; width=fullWidth-412;
+      heading(language+" foundations");
+      paragraph(c==0 ? "Understand values, decisions and memory."
+                      : "Work with strings and modern C++ concepts.",muted,16);
+      paragraph(std::to_string(complete)+" of "+std::to_string(count)+" modules completed",ink,16);
+      const float fraction=count ? static_cast<float>(solved)/(count*2) : 0;
+      DrawRectangleRounded({x,y,width,4},1,8,raised);
+      if(fraction>0) DrawRectangleRounded({x,y,width*fraction,4},1,8,blue);
+      y+=20;
+      paragraph(modules,muted,15);
+      const float bottom=std::max(y+28,top+212);
+      if(button("Open "+language+" course",{pageX+fullWidth-236,top+36,220,46},true,first>=0) ||
+         (!actionUsed && !menuOpen && first>=0 &&
+          hit({pageX,top,fullWidth,bottom-top},GetMousePosition()) && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))) {
         actionUsed=true;
-        track = language;
-        openLesson(next >= 0 ? next : first);
+        const int next=app.nextLesson(language);
+        track=language; openLesson(next>=0 ? next : first);
       }
-      bottom = std::max(bottom, top + 404);
+      text(count==1 ? "1 available module" : std::to_string(count)+" available modules",
+           pageX+fullWidth-236,top+98,15,muted);
+      x=pageX; width=fullWidth; y=bottom;
     }
-    x = startX; width = fullWidth; y = bottom;
-    paragraph("Your progress is saved locally. More modules will appear as they become available.", muted, 16);
+    DrawLineEx({x,y},{x+width,y},1,Color{50,61,78,255});
+    y+=24;
+    paragraph("Practice at your own pace. Your place and progress are saved on this Mac.",muted,16);
   }
   void coursePanels() {
     const auto geometry = courseLayout(GetScreenWidth());
@@ -1239,33 +1245,29 @@ struct UI {
         go(Screen::Catalogue);
     }
   }
-  void exportReport() {
-    auto result = exportProgress(store.directory() / "exports", lessons, app);
-    exportFailed = !result.error.empty();
-    exportNotice = exportFailed ? result.error : "Report saved: " + result.path.string();
-  }
   void progress() {
     title(
         "Your progress",
         "Practice completion and fresh-check evidence describe different parts "
         "of learning. A single question is not proof of long-term mastery.");
-    if (rowButton("Export progress CSV", false, true, 260)) {
-      exportReport();
-    }
-    paragraph("Exports current question results without your typed answers. This report cannot restore a profile.", muted, 16);
-    if (!exportNotice.empty()) paragraph(exportNotice, exportFailed ? red : green, 16);
-    for (int l = 0; l < static_cast<int>(lessons.size()); l++) {
-      heading(lessons[l].track + " / " + lessons[l].title);
-      paragraph(std::to_string(app.completed(l)) +
-                    " / 2 practice questions solved. Fresh check: " +
-                    app.status(l, 2),
-                ink);
-      for (int q = 0; q < 2; ++q)
-        paragraph("Practice " + std::to_string(q + 1) + ": " + app.status(l, q),
-                  app.solved(l, q) ? green : muted, 16);
-      if (rowButton("Review " + lessons[l].title, false, true, 320))
-        openLesson(l, 3);
-      y += 16;
+    const float pageX=x, fullWidth=width;
+    for (const auto& language : {std::string("C"),std::string("C++")}) {
+      y+=16;
+      heading(language+" foundations");
+      for (int l=0; l<static_cast<int>(lessons.size()); ++l) {
+        if(lessons[l].track!=language) continue;
+        DrawLineEx({pageX,y},{pageX+fullWidth,y},1,Color{50,61,78,255});
+        y+=24;
+        const float rowTop=y;
+        x=pageX; width=fullWidth-280;
+        heading(lessons[l].title);
+        paragraph(std::to_string(app.completed(l))+" of 2 practice questions completed",ink,16);
+        paragraph("Fresh check: "+app.status(l,2),muted,16);
+        const float rowBottom=y;
+        x=pageX+fullWidth-260; width=260; y=rowTop;
+        if(rowButton("Review "+lessons[l].title,false,true,260)) openLesson(l,3);
+        x=pageX; width=fullWidth; y=std::max(rowBottom,y)+24;
+      }
     }
     heading("Review mistakes");
     auto remaining = app.reviewItems().size();
@@ -1383,9 +1385,7 @@ struct UI {
     if (!saveMessage.empty()) paragraph(saveMessage, app.unsavedChanges || !store.writable() ? red : muted, 16);
     if (store.writable() && app.unsavedChanges && rowButton("Retry save", false, true, 180)) app.save();
     if (button("View progress", {x,y,180,44})) go(Screen::Progress);
-    if (button("Export progress CSV", {x+196,y,220,44})) exportReport();
     y += 60;
-    if (!exportNotice.empty()) paragraph(exportNotice, exportFailed ? red : green, 15);
     paragraph("Progress folder", ink, 15);
     paragraph(store.directory().string(), muted, 15);
     if (!store.writable()) paragraph("Existing files are preserved. Changes in this session cannot be saved.", muted, 16);
@@ -1667,7 +1667,6 @@ int main(int argc, char **argv) {
                  "Reveal answer",
                  "View summary",
                  "Progress",
-                 "Export progress CSV",
                  "C / C++ comparisons",
                  "Settings",
                  "Preferences",

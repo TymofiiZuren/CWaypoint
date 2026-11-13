@@ -16,7 +16,7 @@ colors:
 
 # CWaypoint dark study workspace
 
-The implemented direction is a charcoal course workspace with top navigation, a CWaypoint monogram Home link, a drawn gear menu, course cards and fixed rounded internal panels. This replaces the former light sidebar design. UI/UX Pro Max's verified dark-mode style guidance informed the neutral layering and contrast; its broad light education/marketing recommendation was rejected as unsuitable for this native learning app. No web framework, font download or icon package was added.
+The implemented direction is a charcoal course workspace with top navigation, a CWaypoint monogram Home link, a drawn gear menu, course rows and fixed rounded internal panels. This replaces the former light sidebar design. UI/UX Pro Max's verified dark-mode style guidance informed the neutral layering and contrast; its broad light education/marketing recommendation was rejected as unsuitable for this native learning app. No web framework, font download or icon package was added.
 
 ## Colors and hierarchy
 
@@ -32,7 +32,7 @@ Use the installed macOS Arial and Andale Mono fonts without redistributing them.
 
 The window opens at 1280×840 with a 960×640 minimum. Top navigation occupies 80 logical pixels. Content is clipped below y=88 and above the 48-high status area. Workspace width is min(1200, window width minus 64), centered. `src/ui_layout.hpp` owns these measured geometry rules and pointer boundaries.
 
-Home and Courses show both C and C++ course cards in one catalogue. Current lessons are the modules: C has variables, pointers and conditions; C++ has strings. Counts derive from the actual catalogue and practice completion; there are no placeholder curriculum totals. Course cards open the first unfinished module, or the first module when the track is complete. Continue restores the saved position.
+Home and Courses show both C and C++ course cards in one catalogue. Current lessons are the modules: C has variables, pointers and conditions; C++ has strings. Counts derive from the actual catalogue and practice completion; there are no placeholder curriculum totals. Course rows open the first unfinished module, or the first module when the track is complete. Continue restores the saved position.
 
 Course screens use three columns at both supported window sizes: a 160/192-wide module list on the left, material in the centre and a 224/280-wide study assistant on the right. `courseLayout()` in `src/ui_layout.hpp` owns this geometry. The centre remains at least 400 logical pixels wide at tested sizes. Material has its own main scroll; assistant transcript/hint options have a bounded scroll region and an anchored message field/Send action. The module list now has its own clipped scroll region, selected-module reveal and a fixed All courses action. Code preserves independent horizontal reading controls.
 
@@ -85,5 +85,15 @@ preview updates immediately. The popup draws after page clipping, blocks
 underlying controls, follows its anchor on resize, and stays within the window.
 Arrow keys and Tab cycle options; Enter/Space select. Escape, outside click or
 scroll dismiss the popup. Focus returns to its field after selection or Escape.
-Local progress provides View progress and Export progress CSV directly, using
-the same report writer and status messages as the Progress screen.
+Local progress links directly to the Progress screen.
+
+## Learning-first course overview
+
+The catalogue uses full-width course rows: a language tile, course description,
+current module completion and available module names, plus a right-aligned Open
+course action. A saved lesson exposes Continue learning above the list. Row
+separators replace nested course cards; the charcoal/periwinkle system, top
+navigation and three-panel lesson workspace remain. Progress groups module
+results by language course, with practice counts, fresh-check status and a
+detailed module summary action. CSV controls and export notices have been
+removed from the application. Screenshot evidence: `.scratch/learning-design`.

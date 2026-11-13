@@ -77,15 +77,7 @@ Home and Courses now show C foundations and C++ foundations together. Open eithe
 
 Daily learning streaks record one local-calendar day after correct answers and persist in version-three profiles. The attributed flame badge retains the partner contribution; visual acceptance on the teammate Mac remains pending. Use `--conditions-test` with an isolated profile for the conditions/streak journey.
 
-### Progress reports and offline content checks
-
-Open **Progress → Export progress CSV** to create a numbered report in the
-active profile's `exports` folder. Each current question has a row containing
-its track, lesson, assessment revision, status, attempts and assistance flags.
-Reports exclude typed answers, ignore obsolete assessment evidence, mark
-recovered history as unverified and label unsaved session changes. Existing
-reports are never overwritten. CSV text is quoted and spreadsheet formula
-prefixes are escaped. A report is for review; it cannot restore a profile.
+### Offline content checks
 
 Validate the compiled lesson catalogue without opening a window or creating a
 profile:
@@ -106,6 +98,11 @@ cached paths to the removed library.
 In **Settings → Appearance**, open the font-size selector and choose 16, 18, 20,
 22 or 24 px. The preview updates immediately and the selected size is saved.
 Use arrows or Tab to move through an open list, Enter/Space to select, and Escape
-to cancel. Settings also links directly to progress and CSV export. The isolated
+to cancel. Settings links directly to your learning progress. The isolated
 `--settings-test --data-dir PATH` journey checks all five selections through
 pointer hit geometry and verifies each saved size.
+
+The course catalogue uses course rows with available modules, practice completion
+and a saved Continue learning action. Progress is grouped by course, with module
+results and links to detailed summaries. CSV export is no longer offered in the
+application interface.
