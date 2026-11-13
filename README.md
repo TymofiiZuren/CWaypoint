@@ -76,3 +76,29 @@ The current macOS build uses a dark theme, top navigation, logo Home link and ge
 Home and Courses now show C foundations and C++ foundations together. Open either course to find modules on the left, course material in the centre and an offline study assistant on the right. The assistant accepts messages and quick prompts, returning authored notes/hints rather than live generated answers; exercise help is recorded before display. Conversations are session-only and cleared on progress reset. Run `--data-dir <isolated-folder> --course-test` (optionally `--compact`) to exercise both courses, module switching, assistant help and reset isolation.
 
 Daily learning streaks record one local-calendar day after correct answers and persist in version-three profiles. The attributed flame badge retains the partner contribution; visual acceptance on the teammate Mac remains pending. Use `--conditions-test` with an isolated profile for the conditions/streak journey.
+
+### Progress reports and offline content checks
+
+Open **Progress → Export progress CSV** to create a numbered report in the
+active profile's `exports` folder. Each current question has a row containing
+its track, lesson, assessment revision, status, attempts and assistance flags.
+Reports exclude typed answers, ignore obsolete assessment evidence, mark
+recovered history as unverified and label unsaved session changes. Existing
+reports are never overwritten. CSV text is quoted and spreadsheet formula
+prefixes are escaped. A report is for review; it cannot restore a profile.
+
+Validate the compiled lesson catalogue without opening a window or creating a
+profile:
+
+```sh
+./build/CWaypoint.app/Contents/MacOS/CWaypoint --check-content
+```
+
+Exit codes: `0` valid content, `1` required-content failure, `2` unavailable
+optional walkthrough/comparison records. The command uses the same validators
+as the application and prints the catalogue counts. This checks authored
+structure, not pedagogical correctness.
+
+If Homebrew has replaced raylib since an earlier build, configure a fresh build
+directory (`cmake -S . -B cmake-build-fresh -DCMAKE_BUILD_TYPE=Release`) to avoid
+cached paths to the removed library.

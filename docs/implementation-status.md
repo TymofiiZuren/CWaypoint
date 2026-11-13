@@ -132,3 +132,20 @@ User-reported unresponsive buttons were reproduced at a 2036-logical-pixel windo
 The new --pointer-test injects a coordinate at each rendered button centre through the normal visibility, clipping and click path, rather than using label-based activation. Before the fix it failed at Start practice; after the fix it completed both-track practice, next-question navigation and the settings menu. Geometry tests cover 960, 1280, 1600, 2036 and 2560 widths and reject side-panel/header/footer hits. Release build, all four CTest suites, the coordinate regression and the twelve existing isolated executable journeys passed. The refreshed packaged copy passed the coordinate journey from /tmp; both signatures and git diff --check passed.
 
 Primary signal is met for the reproduced coordinate/clipping failure. Physical OS clicking remains partially validated: the native window screenshot was available, but the automation click call returned noWindowsAvailable. Running instances must be restarted to load the rebuilt executable. No learning, persistence or theme semantics changed.
+
+## 13 November 2026 — progress reporting and offline validation
+
+- Progress now exports non-overwriting CSV reports with current-revision
+  question evidence, recovered-history and unsaved-state labels. Typed answers
+  are excluded. Export errors remain separate from profile-save notices.
+- `--check-content` checks required lessons and optional walkthroughs/comparisons
+  before creating a profile or initializing raylib. Exit codes are documented in
+  README. No network service or new production dependency was added.
+- Six CTest suites pass, including report escaping, revision filtering,
+  recovered history, unsaved state, file preservation and export failures.
+- The automated smoke journey activated the export control, generated twelve
+  rows and captured the success message. Headless checking reported four
+  lessons, twelve questions, thirty-six hints and three comparisons with no
+  warnings, and created no profile. macOS bundle signature verified.
+- Reports are snapshots, not backups. Intel/second-Mac testing and recording-time
+  keyboard verification remain outside this milestone.

@@ -1,4 +1,5 @@
 #include "core.hpp"
+#include "report.hpp"
 #include "streak_icon.hpp"
 #include "learning/lesson.hpp"
 #include "text_input.hpp"
@@ -40,7 +41,8 @@ struct UI {
   KeyboardModifiers modifiers{};
   bool windowFocused = true;
   bool tabbing = false, answerFocus = false, resetConfirm = false;
-  std::string track = "C", feedback;
+  std::string track = "C", feedback, exportNotice;
+  bool exportFailed = false;
   std::map<std::string, TextInput> drafts;
   std::map<std::string, float> catalogueScroll;
   std::map<std::string, int> practicePosition;
@@ -1185,6 +1187,13 @@ struct UI {
         "Your progress",
         "Practice completion and fresh-check evidence describe different parts "
         "of learning. A single question is not proof of long-term mastery.");
+    if (rowButton("Export progress CSV", false, true, 260)) {
+      auto result = exportProgress(store.directory() / "exports", lessons, app);
+      exportFailed = !result.error.empty();
+      exportNotice = exportFailed ? result.error : "Report saved: " + result.path.string();
+    }
+    paragraph("Exports current question results without your typed answers. This report cannot restore a profile.", muted, 16);
+    if (!exportNotice.empty()) paragraph(exportNotice, exportFailed ? red : green, 16);
     for (int l = 0; l < static_cast<int>(lessons.size()); l++) {
       heading(lessons[l].track + " / " + lessons[l].title);
       paragraph(std::to_string(app.completed(l)) +
@@ -1392,11 +1401,12 @@ int main(int argc, char **argv) {
     bool smoke = false, guided = false, reviewTest = false, codeTest = false,
          undoTest = false, authoredTest = false, courseTest = false, conditionsTest = false, pointerTest = false;
     int frames = 0;
-    bool compact = false, largeText = false;
+    bool compact = false, largeText = false, checkContent = false;
     std::string resumeTest;
     std::string initial = "home";
     for (int i = 1; i < argc; i++) {
       std::string arg = argv[i];
+      if (arg == "--check-content") { checkContent = true; continue; }
       if (arg == "--pointer-test") { smoke=true; pointerTest=true; continue; }
       if (arg == "--conditions-test") { smoke=true; conditionsTest=true; continue; }
       if (arg == "--course-test") { smoke=true; courseTest=true; continue; }
@@ -1436,7 +1446,7 @@ int main(int argc, char **argv) {
         smoke = true;
       else if (arg == "--help") {
         std::cout
-            << "CWaypoint [--data-dir PATH] [--capture-dir PATH] [--screen "
+            << "CWaypoint [--check-content] [--data-dir PATH] [--capture-dir PATH] [--screen "
                "home|lesson|review|settings|progress|compare] "
                "[--pointer-test|--course-test|--smoke-test|--guided-test|--review-test|--code-test|--undo-test|--authored-test] "
                "[--resume-test "
@@ -1444,6 +1454,27 @@ int main(int argc, char **argv) {
         return 0;
       } else
         throw std::runtime_error("Unknown or incomplete option: " + arg);
+    }
+    if (checkContent) {
+      const auto content = sampleLessons();
+      auto error = validate(content);
+      if (!error.empty()) { std::cerr << "Content validation failed: " << error << '\n'; return 1; }
+      size_t questions = 0, hints = 0, warnings = 0;
+      for (const auto& lesson : content) {
+        questions += lesson.questions.size();
+        for (const auto& question : lesson.questions) hints += question.hints.size();
+        if (!lesson.steps.empty()) {
+          auto problem = validateWalkthrough(lesson.steps);
+          if (!problem.empty()) { ++warnings; std::cout << "Optional walkthrough unavailable: " << lesson.id << ": " << problem << '\n'; }
+        }
+      }
+      const auto pairs = comparisons();
+      for (const auto& pair : pairs) {
+        auto problem = validateComparison(pair);
+        if (!problem.empty()) { ++warnings; std::cout << "Optional comparison unavailable: " << problem << '\n'; }
+      }
+      std::cout << "Content valid: " << content.size() << " lessons, " << questions << " questions, " << hints << " hints, " << pairs.size() << " comparisons; " << warnings << " optional warnings.\n";
+      return warnings ? 2 : 0;
     }
     if (!resumeTest.empty() && resumeTest != "seed" &&
         resumeTest != "question" && resumeTest != "walk-seed" &&
@@ -1542,6 +1573,7 @@ int main(int argc, char **argv) {
                  "Reveal answer",
                  "View summary",
                  "Progress",
+                 "Export progress CSV",
                  "C / C++ comparisons",
                  "Settings",
                  "Preferences",
