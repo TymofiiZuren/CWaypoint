@@ -30,7 +30,7 @@ Use the installed macOS Arial and Andale Mono fonts without redistributing them.
 
 ## Window and layout
 
-The window opens at 1280×840 with a 960×640 minimum. Top navigation occupies 80 logical pixels. Content is clipped below y=88 and above the 48-high status area. Workspace width is min(1200, window width minus 64), centered. `src/ui_layout.hpp` owns these measured geometry rules and pointer boundaries.
+The window opens at 1280×840 with a 960×640 minimum. Top navigation occupies 80 logical pixels. Main content is clipped from y=104 to window height−76, inside the rounded page panel and above the 48-high status area. Workspace width is min(1200, window width minus 64), centered. `src/ui_layout.hpp` owns these measured geometry rules and pointer boundaries.
 
 Home and Courses show both C and C++ course cards in one catalogue. Current lessons are the modules: C has variables, pointers and conditions; C++ has strings. Counts derive from the actual catalogue and practice completion; there are no placeholder curriculum totals. Course rows open the first unfinished module, or the first module when the track is complete. Continue restores the saved position.
 
@@ -97,3 +97,15 @@ navigation and three-panel lesson workspace remain. Progress groups module
 results by language course, with practice counts, fresh-check status and a
 detailed module summary action. CSV controls and export notices have been
 removed from the application. Screenshot evidence: `.scratch/learning-design`.
+
+## Tool-assisted usability verification
+
+Course progress explicitly labels solved practice questions alongside module
+completion. Main-page drawing and hit testing share the inset viewport from
+`src/ui_layout.hpp`: y=104 through window height−76. Code and answer-field clips
+use the same bounds, and keyboard focus reveals controls within the inset.
+Side panels retain their independent viewport and anchored controls. This keeps
+scrolling material inside rounded surfaces. UI/UX Pro Max's progress/focus
+searches and Impeccable's Operate guidance informed this refinement; it does not
+establish native accessibility compliance. Evidence and complexity policy are
+recorded in `docs/code-quality.md`.

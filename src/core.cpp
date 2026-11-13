@@ -70,15 +70,9 @@ bool atomicWrite(const std::filesystem::path &path, const std::string &bytes) {
   return ok;
 }
 } // namespace
-std::string validate(const std::vector<Lesson> &ls) {
-  std::set<std::string> ids;
-  if (ls.empty() || ls.size() > 100)
-    return "Invalid lesson count";
-  for (const auto &l : ls) {
-    if (l.id.empty() || !ids.insert(l.id).second || l.title.empty() ||
-        l.questions.size() != 3 || l.revision < 1)
-      return "Invalid lesson record";
-    for (const auto &q : l.questions) {
+namespace {
+std::string validateQuestion(const Question& q,std::set<std::string>& ids) {
+
       if (q.id.empty() || !ids.insert(q.id).second || q.prompt.empty() ||
           q.answer.empty() || q.prompt.size() > 8192 || q.code.size() > 8192)
         return "Invalid or duplicate question";
@@ -89,6 +83,20 @@ std::string validate(const std::vector<Lesson> &ls) {
           std::find(q.choices.begin(), q.choices.end(), q.answer) ==
               q.choices.end())
         return "Choice answer missing";
+    return "";
+}
+}
+std::string validate(const std::vector<Lesson> &ls) {
+  std::set<std::string> ids;
+  if (ls.empty() || ls.size() > 100)
+    return "Invalid lesson count";
+  for (const auto &l : ls) {
+    if (l.id.empty() || !ids.insert(l.id).second || l.title.empty() ||
+        l.questions.size() != 3 || l.revision < 1)
+      return "Invalid lesson record";
+    for (const auto& q:l.questions) {
+      auto error=validateQuestion(q,ids);
+      if(!error.empty()) return error;
     }
   }
   return "";
@@ -129,6 +137,13 @@ Result evaluate(const Question &q, const std::string &answer) {
           correct ? "Correct. " + q.explanation
                   : "Not quite. Try again or use an authored hint."};
 }
+namespace {
+bool readManifest(const std::filesystem::path& path,unsigned long& generation) {
+  std::ifstream f(path); std::string magic,extra; int version=0;
+  return (f >> magic >> version >> generation) && magic=="CWAYPOINT" &&
+         version==1 && generation!=0 && !(f >> extra);
+}
+}
 Store::Store(std::filesystem::path p) : root(std::move(p)) {
   std::error_code ec;
   std::filesystem::create_directories(root, ec);
@@ -144,11 +159,7 @@ Store::Store(std::filesystem::path p) : root(std::move(p)) {
               "temporary practice.";
   auto manifest = root / "manifest";
   if (std::filesystem::exists(manifest, ec)) {
-    std::ifstream f(manifest);
-    std::string magic, extra;
-    int version = 0;
-    if (!(f >> magic >> version >> generation) || magic != "CWAYPOINT" ||
-        version != 1 || generation == 0 || (f >> extra)) {
+    if (!readManifest(manifest,generation)) {
       canWrite = false;
       message = "Progress format is unsupported or damaged. Files preserved; "
                 "temporary practice is available.";
@@ -177,65 +188,67 @@ Store::~Store() {
   if (lockFd >= 0)
     close(lockFd);
 }
-bool Store::readSnapshot(const std::filesystem::path &p, Profile &result) {
+namespace {
+bool readProfileHeader(std::istream& f, Profile& p, size_t& count) {
+  if (!(f >> std::quoted(p.lesson) >> p.step >> p.textSize >> p.recovered >> count)) return false;
+  return p.step>=0 && p.step<=3 && p.textSize>=16 && p.textSize<=24 && count<=5000;
+}
+bool validEvidence(const std::string& id,const Evidence& e,const Profile& p) {
+  if (id.empty() || id.size()>128 || p.evidence.count(id)) return false;
+  if (e.attempts<0 || e.attempts>1000000 || e.revision<1) return false;
+  if (e.independent && (!e.solved || e.attempts<1)) return false;
+  return true;
+}
+bool readEvidence(std::istream& f,Profile& p,size_t count) {
+  for (size_t i=0;i<count;++i) {
+    std::string id; Evidence e; bool review;
+    if (!(f >> std::quoted(id) >> e.revision >> e.attempts >> e.issued >> e.helped >> e.solved >> e.independent >> review)) return false;
+    if (!validEvidence(id,e,p)) return false;
+    p.evidence[id]=e;
+    if (review) p.review.insert(id);
+  }
+  return true;
+}
+bool validResume(const Profile& p) {
+  if (p.question<0 || p.question>2 || p.walkthrough<0 || p.walkthrough>31 || p.resumeRevision<0) return false;
+  if (p.step==1 && p.question>1) return false;
+  if (p.step==2 && p.question!=2) return false;
+  if (p.step!=0 && p.walkthrough!=0) return false;
+  return !((p.step==0 || p.step==3) && p.question!=0);
+}
+bool readResume(std::istream& f,Profile& p,int version) {
+  if (version<2) { p.question=p.step==2 ? 2 : 0; return true; }
+  std::string tag;
+  if (!(f >> tag >> p.question >> p.walkthrough >> p.resumeRevision) || tag!="RESUME") return false;
+  return validResume(p);
+}
+bool readActivity(std::istream& f,Profile& p,int version) {
+  if (version<3) return true;
+  std::string tag; size_t count;
+  if (!(f >> tag >> count) || tag!="ACTIVITY" || count>50000) return false;
+  for(size_t i=0;i<count;++i) {
+    int day;
+    if (!(f >> day) || day<0 || day>100000 || !p.studyDays.insert(day).second) return false;
+  }
+  return true;
+}
+}
+bool Store::readSnapshot(const std::filesystem::path& path,Profile& result) {
   std::error_code ec;
-  auto size = std::filesystem::file_size(p, ec);
-  if (ec || size > 1024 * 1024)
-    return false;
-  std::ifstream f(p);
-  Profile v;
-  std::string magic;
-  unsigned long gen;
-  int version;
-  size_t count;
-  if (!(f >> magic >> version >> gen) || magic != "CWPROFILE" ||
-      (version != 1 && version != 2 && version != 3) || gen != generation)
-    return false;
-  if (!(f >> std::quoted(v.lesson) >> v.step >> v.textSize >> v.recovered >>
-        count) ||
-      v.step < 0 || v.step > 3 || v.textSize < 16 || v.textSize > 24 ||
-      count > 5000)
-    return false;
-  for (size_t i = 0; i < count; i++) {
-    std::string id;
-    Evidence e;
-    bool review;
-    if (!(f >> std::quoted(id) >> e.revision >> e.attempts >> e.issued >>
-          e.helped >> e.solved >> e.independent >> review) ||
-        id.empty() || id.size() > 128 || e.attempts < 0 ||
-        e.attempts > 1000000 || e.revision < 1 || v.evidence.count(id) ||
-        (e.independent && (!e.solved || e.attempts < 1)))
-      return false;
-    v.evidence[id] = e;
-    if (review)
-      v.review.insert(id);
-  }
-  if (version >= 2) {
-    std::string tag;
-    if (!(f >> tag >> v.question >> v.walkthrough >> v.resumeRevision) ||
-        tag != "RESUME" || v.question < 0 || v.question > 2 ||
-        v.walkthrough < 0 || v.walkthrough > 31 || v.resumeRevision < 0 ||
-        (v.step == 1 && v.question > 1) || (v.step == 2 && v.question != 2) ||
-        (v.step != 0 && v.walkthrough != 0) ||
-        ((v.step == 0 || v.step == 3) && v.question != 0))
-      return false;
-  } else
-    v.question = v.step == 2 ? 2 : 0;
-  if (version >= 3) {
-    std::string tag;
-    size_t days;
-    if (!(f >> tag >> days) || tag != "ACTIVITY" || days > 50000)
-      return false;
-    for (size_t i = 0; i < days; ++i) {
-      int day;
-      if (!(f >> day) || day < 0 || day > 100000 || !v.studyDays.insert(day).second)
-        return false;
-    }
-  }
-  std::string end, extra;
-  if (!(f >> end) || end != "END" || (f >> extra))
-    return false;
-  result = std::move(v);
+  const auto size=std::filesystem::file_size(path,ec);
+  if (ec || size>1024*1024) return false;
+  std::ifstream f(path);
+  std::string magic; unsigned long gen; int version;
+  if (!(f >> magic >> version >> gen) || magic!="CWPROFILE" || gen!=generation) return false;
+  if (version<1 || version>3) return false;
+  Profile p; size_t count;
+  if (!readProfileHeader(f,p,count)) return false;
+  if (!readEvidence(f,p,count)) return false;
+  if (!readResume(f,p,version)) return false;
+  if (!readActivity(f,p,version)) return false;
+  std::string end,extra;
+  if (!(f >> end) || end!="END" || (f >> extra)) return false;
+  result=std::move(p);
   return true;
 }
 Profile Store::load() {
@@ -519,12 +532,17 @@ int Controller::nextLesson(const std::string &track, int after) const {
   }
   return -1;
 }
-bool Controller::resume(int l, int step, int question, int walkthrough) {
-  if (l < 0 || l >= static_cast<int>(lessons.size()) || step < 0 || step > 3 ||
+namespace {
+bool validLessonPosition(const std::vector<Lesson>& lessons,int l,int step,int question,int walkthrough) {
+  return !(l < 0 || l >= static_cast<int>(lessons.size()) || step < 0 || step > 3 ||
       question < 0 || question > 2 || (step == 1 && question > 1) ||
       walkthrough < 0 || walkthrough > 31 ||
       (step == 0 && walkthrough > 0 &&
-       walkthrough >= static_cast<int>(lessons[l].steps.size()))) {
+       walkthrough >= static_cast<int>(lessons[l].steps.size())));
+}
+}
+bool Controller::resume(int l, int step, int question, int walkthrough) {
+  if (!validLessonPosition(lessons,l,step,question,walkthrough)) {
     notice = "Cannot save an invalid lesson position.";
     return false;
   }

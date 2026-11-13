@@ -13,3 +13,10 @@ demo:
 	mkdir -p build
 	$(CXX) $(CXXFLAGS) examples/lesson_demo.cpp src/learning/lesson.cpp -o build/lesson-demo
 	./build/lesson-demo
+
+# Optional developer tooling; no application runtime dependency.
+PYTHON ?= python3
+.PHONY: quality
+quality:
+	$(PYTHON) tests/complexity_gate_tests.py
+	$(PYTHON) scripts/check_complexity.py

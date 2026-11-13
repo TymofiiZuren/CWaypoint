@@ -106,3 +106,11 @@ The course catalogue uses course rows with available modules, practice completio
 and a saved Continue learning action. Progress is grouped by course, with module
 results and links to detailed summaries. CSV export is no longer offered in the
 application interface.
+
+### Complexity policy
+
+Every application function under `src/` must have Lizard CCN ≤ 15, including the
+macOS bridge. Install the pinned development-only tools and run `make quality`;
+see [code quality and measured results](docs/code-quality.md) for exact commands,
+the before/after comparison, scc's separate file-level estimate and validation
+limits. These tools are not required to build or run the app.
