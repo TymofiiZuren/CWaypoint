@@ -102,3 +102,10 @@ structure, not pedagogical correctness.
 If Homebrew has replaced raylib since an earlier build, configure a fresh build
 directory (`cmake -S . -B cmake-build-fresh -DCMAKE_BUILD_TYPE=Release`) to avoid
 cached paths to the removed library.
+
+In **Settings → Appearance**, open the font-size selector and choose 16, 18, 20,
+22 or 24 px. The preview updates immediately and the selected size is saved.
+Use arrows or Tab to move through an open list, Enter/Space to select, and Escape
+to cancel. Settings also links directly to progress and CSV export. The isolated
+`--settings-test --data-dir PATH` journey checks all five selections through
+pointer hit geometry and verifies each saved size.

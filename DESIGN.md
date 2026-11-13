@@ -76,3 +76,14 @@ offline hints and grading behavior are preserved.
 Native captures and interaction evidence: `.scratch/modern-ui` and
 `.scratch/modern-ui-confirm`. Automated journeys exercise real handlers and
 pointer hit geometry; they do not establish native VoiceOver support.
+
+### Font-size dropdown and settings shortcuts
+
+Appearance uses a single selector with 16, 18, 20, 22 and 24 px options. The
+selected size is marked and saved through the existing controller; the reading
+preview updates immediately. The popup draws after page clipping, blocks
+underlying controls, follows its anchor on resize, and stays within the window.
+Arrow keys and Tab cycle options; Enter/Space select. Escape, outside click or
+scroll dismiss the popup. Focus returns to its field after selection or Escape.
+Local progress provides View progress and Export progress CSV directly, using
+the same report writer and status messages as the Progress screen.

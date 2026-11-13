@@ -66,6 +66,9 @@ struct UI {
   std::string assistantKey;
   bool assistantBody = false;
   float assistantTop = 0, assistantBottom = 0;
+  bool fontMenuOpen = false, drawingFontMenu = false, fontMenuJustOpened = false;
+  Rectangle fontField{};
+  int fontFieldId = 0, fontOption = 1;
   bool menuOpen = false, menuJustOpened = false, keyboardHelp = false;
   bool inContent = false, blockedFresh = false, reviewMode = false;
   std::string reviewTrack;
@@ -142,6 +145,7 @@ struct UI {
     y += 4;
   }
   bool hit(Rectangle r, Vector2 point) {
+    if(fontMenuOpen && !drawingFontMenu) return false;
     if(menuOpen && inCoursePanels) return false;
     if(assistantBody && (point.y < assistantTop || point.y >= assistantBottom)) return false;
     if(moduleBody && (point.y < moduleTop || point.y >= moduleBottom)) return false;
@@ -210,11 +214,11 @@ struct UI {
          : destructive ? (primary && !hot ? paper : red)
          : primary ? paper
                    : ink);
-    bool clicked = hot && (injectedPointer || IsMouseButtonPressed(MOUSE_BUTTON_LEFT));
-    bool key = windowFocused && enabled && !((inContent || inCoursePanels) && menuOpen) && !actionUsed && selected &&
+    bool clicked = !actionUsed && hot && (injectedPointer || IsMouseButtonPressed(MOUSE_BUTTON_LEFT));
+    bool key = windowFocused && enabled && (!fontMenuOpen || drawingFontMenu) && !((inContent || inCoursePanels) && menuOpen) && !actionUsed && selected &&
                (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) &&
                !answerFocus;
-    bool scripted = !pointerHitTest && enabled && !automaticAction.empty() &&
+    bool scripted = (!fontMenuOpen || drawingFontMenu) && !pointerHitTest && enabled && !automaticAction.empty() &&
                     automaticAction == label && !actionUsed &&
                     (automaticScope.empty() || automaticScope == currentScope);
     if (clicked) {
@@ -241,6 +245,7 @@ struct UI {
       catalogueScroll[track] = scroll;
     screen = next;
     menuOpen = false;
+    fontMenuOpen = false;
     keyboardHelp = false;
     reviewMode = false;
     scroll = next == Screen::Catalogue ? catalogueScroll[track] : 0;
@@ -682,7 +687,16 @@ struct UI {
     actionUsed = false;
     SetMouseCursor(MOUSE_CURSOR_DEFAULT);
     if (IsKeyPressed(KEY_TAB)) chatFocus = false;
-    if (IsKeyPressed(KEY_TAB) && menuOpen) {
+    bool closedFontMenu = false;
+    if (fontMenuOpen && (IsKeyPressed(KEY_ESCAPE) || GetMouseWheelMove() != 0 ||
+        IsKeyPressed(KEY_PAGE_DOWN) || IsKeyPressed(KEY_PAGE_UP))) {
+      fontMenuOpen = false; closedFontMenu = true; focus = fontFieldId;
+      actionUsed = true;
+    }
+    if (fontMenuOpen && (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_TAB))) {
+      fontOption = (fontOption + ((IsKeyPressed(KEY_UP) || (IsKeyPressed(KEY_TAB) && modifiers.shift)) ? 4 : 1)) % 5;
+      tabbing = true;
+    } else if (IsKeyPressed(KEY_TAB) && menuOpen) {
       focus = focus == lastWidgets - 2 ? lastWidgets - 1 : lastWidgets - 2;
       tabbing = true;
       answerFocus = false;
@@ -693,7 +707,7 @@ struct UI {
       tabbing = true;
       answerFocus = false;
     }
-    if (IsKeyPressed(KEY_ESCAPE)) {
+    if (IsKeyPressed(KEY_ESCAPE) && !closedFontMenu) {
       if (menuOpen) {
         menuOpen = false;
         focus = 5;
@@ -749,6 +763,37 @@ struct UI {
     if (saveProblem && button("Save details",
         {static_cast<float>(GetScreenWidth()-156), static_cast<float>(GetScreenHeight()-43),124,38}))
       go(Screen::Settings);
+    if (fontMenuOpen) {
+      const float popupY = fontField.y + fontField.height + 8;
+      Rectangle popup{fontField.x, std::min(popupY, static_cast<float>(GetScreenHeight()-316)), fontField.width, 256};
+      popup.y = std::max(88.f, popup.y);
+      const bool outside = IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !actionUsed &&
+          !CheckCollisionPointRec(GetMousePosition(), popup) &&
+          !CheckCollisionPointRec(GetMousePosition(), fontField);
+      if (outside) { fontMenuOpen = false; actionUsed = true; focus = fontFieldId; }
+      else {
+        panel(popup);
+        drawingFontMenu = true;
+        // Only the popup options participate in keyboard selection while open.
+        if (tabbing || fontMenuJustOpened) focus = widgets + fontOption;
+        fontMenuJustOpened = false;
+        for (int i=0; i<5; ++i) {
+          const int value = 16 + i*2;
+          Rectangle option{popup.x+8,popup.y+8+i*48.f,popup.width-16,48};
+          const bool current = app.profile.textSize==value;
+          if (current) DrawRectangleRounded(option,.25f,12,pale);
+          if (button(std::to_string(value)+" px",option,false,true,true,ButtonStyle::Quiet)) {
+            app.setTextSize(value);
+            fontMenuOpen = false; focus = fontFieldId;
+          }
+          if (current) {
+            DrawLineEx({option.x+option.width-28,option.y+24},{option.x+option.width-23,option.y+29},2,blue);
+            DrawLineEx({option.x+option.width-23,option.y+29},{option.x+option.width-14,option.y+18},2,blue);
+          }
+        }
+        drawingFontMenu = false;
+      }
+    }
     if (menuOpen) {
       const Rectangle menu{static_cast<float>(GetScreenWidth()-280),80,256,128};
       const bool dismiss = IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
@@ -1194,15 +1239,18 @@ struct UI {
         go(Screen::Catalogue);
     }
   }
+  void exportReport() {
+    auto result = exportProgress(store.directory() / "exports", lessons, app);
+    exportFailed = !result.error.empty();
+    exportNotice = exportFailed ? result.error : "Report saved: " + result.path.string();
+  }
   void progress() {
     title(
         "Your progress",
         "Practice completion and fresh-check evidence describe different parts "
         "of learning. A single question is not proof of long-term mastery.");
     if (rowButton("Export progress CSV", false, true, 260)) {
-      auto result = exportProgress(store.directory() / "exports", lessons, app);
-      exportFailed = !result.error.empty();
-      exportNotice = exportFailed ? result.error : "Report saved: " + result.path.string();
+      exportReport();
     }
     paragraph("Exports current question results without your typed answers. This report cannot restore a profile.", muted, 16);
     if (!exportNotice.empty()) paragraph(exportNotice, exportFailed ? red : green, 16);
@@ -1301,12 +1349,23 @@ struct UI {
     };
     group("Appearance", "Make lesson text and code comfortable to read.");
     text("Text size", x, y, 17, ink);
-    text(std::to_string(app.profile.textSize) + " px", x + width - 52, y, 16, muted);
     y += 32;
-    if (button("Smaller", {x, y, 140, 44}, false, app.profile.textSize > 16))
-      app.setTextSize(app.profile.textSize - 2);
-    if (button("Larger", {x + 152, y, 140, 44}, false, app.profile.textSize < 24))
-      app.setTextSize(app.profile.textSize + 2);
+    fontField = {x,y,220,44};
+    fontFieldId = widgets;
+    drawingFontMenu = true;
+    if (button("Font size", fontField, false, true, false)) {
+      fontMenuOpen = !fontMenuOpen;
+      fontOption = (app.profile.textSize-16)/2;
+      fontMenuJustOpened = fontMenuOpen;
+    }
+    drawingFontMenu = false;
+    DrawRectangleRounded(fontField, .36f, 12, fontMenuOpen || hit(fontField,GetMousePosition()) ? pale : raised);
+    DrawRectangleRoundedLinesEx(fontField,.36f,12,1,fontMenuOpen ? blue : line);
+    if (tabbing && focus == fontFieldId)
+      DrawRectangleRoundedLinesEx({x-3,y-3,226,50},.36f,12,2,blue);
+    text(std::to_string(app.profile.textSize)+" px",x+16,y+13,17,ink);
+    DrawLineEx({x+190,y+19},{x+196,y+25},2,muted);
+    DrawLineEx({x+196,y+25},{x+202,y+19},2,muted);
     y += 64;
     text("Reading preview", x, y, 14, muted); y += 28;
     paragraph("A variable gives a name to a value.", ink);
@@ -1323,6 +1382,10 @@ struct UI {
     const auto saveMessage = app.notice.empty() ? store.status() : app.notice;
     if (!saveMessage.empty()) paragraph(saveMessage, app.unsavedChanges || !store.writable() ? red : muted, 16);
     if (store.writable() && app.unsavedChanges && rowButton("Retry save", false, true, 180)) app.save();
+    if (button("View progress", {x,y,180,44})) go(Screen::Progress);
+    if (button("Export progress CSV", {x+196,y,220,44})) exportReport();
+    y += 60;
+    if (!exportNotice.empty()) paragraph(exportNotice, exportFailed ? red : green, 15);
     paragraph("Progress folder", ink, 15);
     paragraph(store.directory().string(), muted, 15);
     if (!store.writable()) paragraph("Existing files are preserved. Changes in this session cannot be saved.", muted, 16);
@@ -1429,7 +1492,7 @@ int main(int argc, char **argv) {
   try {
     std::filesystem::path profile = defaultProfile(), capture;
     bool smoke = false, guided = false, reviewTest = false, codeTest = false,
-         undoTest = false, authoredTest = false, courseTest = false, conditionsTest = false, pointerTest = false;
+         undoTest = false, authoredTest = false, courseTest = false, conditionsTest = false, pointerTest = false, settingsTest = false;
     int frames = 0;
     bool compact = false, largeText = false, checkContent = false;
     std::string resumeTest;
@@ -1437,6 +1500,7 @@ int main(int argc, char **argv) {
     for (int i = 1; i < argc; i++) {
       std::string arg = argv[i];
       if (arg == "--check-content") { checkContent = true; continue; }
+      if (arg == "--settings-test") { smoke=true; settingsTest=true; continue; }
       if (arg == "--pointer-test") { smoke=true; pointerTest=true; continue; }
       if (arg == "--conditions-test") { smoke=true; conditionsTest=true; continue; }
       if (arg == "--course-test") { smoke=true; courseTest=true; continue; }
@@ -1478,7 +1542,7 @@ int main(int argc, char **argv) {
         std::cout
             << "CWaypoint [--check-content] [--data-dir PATH] [--capture-dir PATH] [--screen "
                "home|lesson|review|settings|progress|compare] "
-               "[--pointer-test|--course-test|--smoke-test|--guided-test|--review-test|--code-test|--undo-test|--authored-test] "
+               "[--settings-test|--pointer-test|--course-test|--smoke-test|--guided-test|--review-test|--code-test|--undo-test|--authored-test] "
                "[--resume-test "
                "seed|question|walk-seed|walk]\n";
         return 0;
@@ -1545,7 +1609,7 @@ int main(int argc, char **argv) {
     SetTargetFPS(60);
     SetExitKey(KEY_NULL);
     UI ui(lessons, store, controller);
-    ui.pointerHitTest = pointerTest;
+    ui.pointerHitTest = pointerTest || settingsTest;
     Image fire = LoadImageFromMemory(".png", streakFirePng, sizeof(streakFirePng));
     ImageFormat(&fire, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
     ui.streakFire = LoadTextureFromImage(fire);
@@ -1607,7 +1671,8 @@ int main(int argc, char **argv) {
                  "C / C++ comparisons",
                  "Settings",
                  "Preferences",
-                 "Larger",
+                 "Font size",
+                 "20 px",
                  "Settings",
                  "Keyboard help",
                  "Back to preferences",
@@ -1683,6 +1748,10 @@ int main(int argc, char **argv) {
                "Start practice","Chat: Help me understand assignment","Send",
                "Settings","Preferences","Reset progress...","Confirm reset",
                "Lessons","Open C course","Start practice"};
+    if(settingsTest)
+      actions={"Settings","Preferences","Font size","24 px","Font size","16 px",
+               "Font size","18 px","Font size","22 px","Font size","20 px",
+               "Keyboard shortcuts","Back to preferences"};
     if(conditionsTest)
       actions={"Lessons","Open C course","Module: Conditions: if and else", "Start practice",
                "Pass","Check answer","Next practice question","Enter answer: Retry","Check answer",
@@ -1723,12 +1792,12 @@ int main(int argc, char **argv) {
         ui.automaticAction = actions[action];
       else
         ui.automaticAction.clear();
-      if (smoke && !guided && !reviewTest && !codeTest && !undoTest && !authoredTest && !courseTest && !conditionsTest && !pointerTest &&
+      if (smoke && !guided && !reviewTest && !codeTest && !undoTest && !authoredTest && !courseTest && !conditionsTest && !pointerTest && !settingsTest &&
           resumeTest.empty() && action == 1 && !ui.automaticAction.empty()) {
         ui.scroll = std::min(80.f, ui.maxScroll);
         expectedCatalogueScroll = ui.scroll;
       }
-      if (smoke && !guided && !reviewTest && !codeTest && !undoTest && !authoredTest && !courseTest && !conditionsTest && !pointerTest &&
+      if (smoke && !guided && !reviewTest && !codeTest && !undoTest && !authoredTest && !courseTest && !conditionsTest && !pointerTest && !settingsTest &&
           resumeTest.empty() && action == 6 && !ui.automaticAction.empty()) {
         ui.draft().set("inx");
         ui.draft().moveTo(2);
@@ -1777,6 +1846,8 @@ int main(int argc, char **argv) {
         ui.scroll = ui.maxScroll;
       if (resumeTest == "walk" && !pendingCapture.empty())
         ui.scroll = ui.maxScroll;
+      if (settingsTest && ui.automaticAction == "Keyboard shortcuts") ui.scroll = ui.maxScroll;
+      if (settingsTest && ui.automaticAction == "Back to preferences") ui.scroll = 0;
       if (courseTest && !pendingCapture.empty() && (action == 19 || action == 20))
         ui.scroll = ui.maxScroll;
       if (codeTest && !pendingCapture.empty()) {
@@ -1825,6 +1896,12 @@ int main(int argc, char **argv) {
       if (smoke && !ui.automaticAction.empty()) {
         if (ui.actionUsed) {
           action++;
+          if (settingsTest && action >= 4 && action <= 12 && action % 2 == 0) {
+            const int expected[] = {24,16,18,22,20};
+            if (controller.profile.textSize != expected[(action-4)/2] ||
+                store.load().textSize != expected[(action-4)/2] || ui.fontMenuOpen)
+              throw std::runtime_error("Font selection did not close and persist the chosen size.");
+          }
           if (pointerTest && action >= 3 && action <= 5) {
             const int expectedStep = action == 4 ? 2 : 1;
             if (ui.walk != expectedStep || controller.profile.walkthrough != expectedStep)
@@ -1852,7 +1929,7 @@ int main(int argc, char **argv) {
         }
       }
       if (smoke && action == actions.size() && pendingCapture.empty()) {
-        if (!guided && !reviewTest && !codeTest && !undoTest && !authoredTest && !courseTest && !conditionsTest && !pointerTest &&
+        if (!guided && !reviewTest && !codeTest && !undoTest && !authoredTest && !courseTest && !conditionsTest && !pointerTest && !settingsTest &&
             resumeTest.empty())
           testOk = controller.completed(0) == 1 &&
                    controller.profile.evidence.at("c-var-p2").helped &&
@@ -1871,6 +1948,8 @@ int main(int argc, char **argv) {
                     << " C++ solved=" << controller.solved(1,0)
                     << " screen=" << static_cast<int>(ui.screen)
                     << " menu=" << ui.menuOpen << '\n';
+        if(settingsTest)
+          testOk=controller.profile.textSize==20 && store.load().textSize==20 && ui.screen==Screen::Settings;
         if(conditionsTest)
           testOk=controller.completed(3)==2 && controller.solved(3,2) &&
             controller.status(3,2)=="Solved independently on first attempt" &&
