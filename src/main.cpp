@@ -29,6 +29,7 @@ enum class Screen {
   Settings,
   Compare
 };
+enum class ButtonStyle { Standard, Quiet, Destructive };
 struct UI {
   Font font{}, mono{};
   Texture2D streakFire{}, streakInactive{};
@@ -157,7 +158,8 @@ struct UI {
     return !inContent || (r.y + r.height > 88 && r.y < GetScreenHeight() - 48);
   }
   bool button(const std::string &label, Rectangle r, bool primary = false,
-              bool enabled = true, bool showLabel = true) {
+              bool enabled = true, bool showLabel = true,
+              ButtonStyle style = ButtonStyle::Standard) {
     int id = -1;
     if (enabled)
       id = widgets++;
@@ -165,14 +167,22 @@ struct UI {
     const Vector2 pointer = injectedPointer ? Vector2{r.x+r.width/2,r.y+r.height/2} : GetMousePosition();
     bool hot = enabled && visible(r) && hit(r, pointer);
     bool selected = enabled && id == focus;
-    Color bg = primary ? blue : surface;
-    if (hot)
-      bg = primary ? Color{190, 199, 255, 255} : pale;
-    if (!enabled)
-      bg = Color{32, 38, 48, 255};
-    DrawRectangleRounded(r, 0.16f, 8, bg);
-    if (!primary && hot)
-      DrawRectangleRoundedLinesEx(r, 0.16f, 8, 1, line);
+    const bool quiet = style == ButtonStyle::Quiet || !showLabel;
+    const bool destructive = style == ButtonStyle::Destructive;
+    const bool pressed = hot && IsMouseButtonDown(MOUSE_BUTTON_LEFT);
+    Color bg = primary ? blue : raised;
+    if (destructive) bg = primary ? red : Color{49, 32, 38, 255};
+    if (hot) bg = destructive ? Color{85, 44, 52, 255}
+                             : primary ? Color{190, 199, 255, 255} : Color{45, 55, 70, 255};
+    if (pressed) bg = destructive ? Color{104, 52, 61, 255}
+                                 : primary ? Color{145, 158, 239, 255} : pale;
+    if (!enabled) bg = Color{30, 35, 44, 255};
+    const float radius = std::min(1.f, 16.f / std::min(r.width, r.height));
+    if (!quiet || hot) DrawRectangleRounded(r, radius, 12, bg);
+    if (!quiet && !primary)
+      DrawRectangleRoundedLinesEx(r, radius, 12, 1,
+          !enabled ? Color{48, 55, 66, 255} : destructive ? red : line);
+    if (hot) SetMouseCursor(MOUSE_CURSOR_POINTING_HAND);
     if(selected && tabbing && moduleBody) {
       auto &position=moduleScroll[lessons[lesson].track];
       if(r.y<moduleTop) position=std::max(0.f,position+r.y-moduleTop);
@@ -197,6 +207,7 @@ struct UI {
       fs -= 1;
     if (showLabel) text(label, r.x + 16, r.y + (r.height - fs) / 2, fs,
          !enabled  ? muted
+         : destructive ? (primary && !hot ? paper : red)
          : primary ? paper
                    : ink);
     bool clicked = hot && (injectedPointer || IsMouseButtonPressed(MOUSE_BUTTON_LEFT));
@@ -588,6 +599,7 @@ struct UI {
                static_cast<int>(py + 30 * scale), 3 * scale, paper);
   }
   void sidebar() { // The shared navigation entry point now draws the top bar.
+    SetMouseCursor(MOUSE_CURSOR_DEFAULT);
     DrawRectangle(0, 0, GetScreenWidth(), 80, surface);
     DrawLine(0, 79, GetScreenWidth(), 79, Color{50, 61, 78, 255});
     if (button("Home", {24, 16, 192, 48}, false, true, false))
@@ -987,7 +999,7 @@ struct UI {
                                           "Summary"};
     float bw = (width - 24) / 4;
     for (int i = 0; i < 4; i++)
-      if (button(tabs[i], {x + i * (bw + 8), y, bw, 42}, false)) {
+      if (button(tabs[i], {x + i * (bw + 8), y, bw, 42}, false, true, true, ButtonStyle::Quiet)) {
         reviewMode = false;
         stage = i;
         question = i == 2 ? 2 : i == 1 ? practicePosition[l.id] : 0;
@@ -1271,42 +1283,65 @@ struct UI {
       if (rowButton("Back to preferences", true, true, 240)) keyboardHelp = false;
       return;
     }
-    title("Make room to learn",
-          "Choose a comfortable reading size. Learning stays offline until a "
-          "future AI integration is explicitly configured.");
-    heading("Text size");
-    paragraph("Current size: " + std::to_string(app.profile.textSize) +
-              " px. All lesson text and code use this setting.");
+    title("Settings", "Your reading experience, study tools and local learning data.");
+    const float pageX = x, pageWidth = width;
+    // Aligned setting groups share the page surface rather than nesting cards.
+    auto group = [&](const std::string& label, const std::string& description) {
+      x = pageX; width = pageWidth;
+      y += 16;
+      DrawLineEx({x,y}, {x+width,y}, 1, Color{50,61,78,255});
+      y += 24;
+      text(label, x, y, 20, ink);
+      const float labelWidth = std::min(224.f, pageWidth * .26f);
+      float labelY = y + 32;
+      for (const auto& row : wrap(description, labelWidth-24, 15)) {
+        text(row, x, labelY, 15, muted); labelY += 22;
+      }
+      x = pageX + labelWidth; width = pageWidth - labelWidth;
+    };
+    group("Appearance", "Make lesson text and code comfortable to read.");
+    text("Text size", x, y, 17, ink);
+    text(std::to_string(app.profile.textSize) + " px", x + width - 52, y, 16, muted);
+    y += 32;
     if (button("Smaller", {x, y, 140, 44}, false, app.profile.textSize > 16))
       app.setTextSize(app.profile.textSize - 2);
-    if (button("Larger", {x + 156, y, 140, 44}, false,
-               app.profile.textSize < 24))
+    if (button("Larger", {x + 152, y, 140, 44}, false, app.profile.textSize < 24))
       app.setTextSize(app.profile.textSize + 2);
-    y += 76;
-    heading("Optional AI assistance");
-    paragraph("Not configured. The application sends no network requests. "
-              "Authored hints work at all three levels without credentials.");
-    heading("Saved progress");
-    paragraph(app.notice.empty() ? store.status() : app.notice, store.writable() ? muted : red);
-    if (store.writable() && rowButton("Retry save", false, true, 180)) app.save();
-    paragraph(store.writable()
-                  ? "This profile is writable. Attempts, help, review items "
-                    "and your resume point are saved locally."
-                  : "This session cannot write saved progress. Existing files "
-                    "are preserved; temporary practice is available.");
-    paragraph("Progress folder: " + store.directory().string(), muted, 16);
-    heading("Reset learning progress");
-    paragraph("Reset starts a new profile generation. Older backup files "
-              "remain on disk for preservation and are never automatically "
-              "restored into the new generation. This is not secure erasure.");
+    y += 64;
+    text("Reading preview", x, y, 14, muted); y += 28;
+    paragraph("A variable gives a name to a value.", ink);
+    const float previewSize = static_cast<float>(app.profile.textSize);
+    DrawTextEx(mono, "int score = 42;", {x,y}, previewSize, 1, blue);
+    y += previewSize + 24;
+    group("Study assistant", "Help remains available while you study offline.");
+    DrawCircle(static_cast<int>(x+4), static_cast<int>(y+10), 4, green);
+    text("Offline hints available", x+18, y, 17, ink); y += 32;
+    paragraph("Three authored hint levels per question. Live AI is not configured; no network requests are sent.", muted, 16);
+    y += 8;
+    group("Local progress", "Your attempts and resume point stay on this Mac.");
+    paragraph(store.writable() ? "Local saving available" : "Temporary practice session", store.writable() ? green : red, 17);
+    const auto saveMessage = app.notice.empty() ? store.status() : app.notice;
+    if (!saveMessage.empty()) paragraph(saveMessage, app.unsavedChanges || !store.writable() ? red : muted, 16);
+    if (store.writable() && app.unsavedChanges && rowButton("Retry save", false, true, 180)) app.save();
+    paragraph("Progress folder", ink, 15);
+    paragraph(store.directory().string(), muted, 15);
+    if (!store.writable()) paragraph("Existing files are preserved. Changes in this session cannot be saved.", muted, 16);
+    y += 8;
+    group("Keyboard & access", "Use the app with a mouse or keyboard.");
+    paragraph("Tab moves focus. Enter or Space activates a control. Page Up and Page Down scroll.", muted, 16);
+    if (rowButton("Keyboard shortcuts", false, true, 220)) { keyboardHelp = true; scroll = 0; }
+    paragraph("Single-line ASCII answers. Native VoiceOver and Unicode/IME input are not implemented.", muted, 15);
+    y += 8;
+    group("Reset progress", "Start again with a new local profile generation.");
+    paragraph("Clears lesson progress, first-attempt evidence and mistake review. Older backup files remain on disk and are not automatically restored. This is not secure erasure.", muted, 16);
     if (!resetConfirm) {
-      if (rowButton("Reset progress...", false, store.writable(), 220))
+      if (button("Reset progress...", {x, y, 220, 44}, false, store.writable(), true, ButtonStyle::Destructive))
         resetConfirm = true;
     } else {
       paragraph("Reset all lesson progress, first-attempt evidence and mistake "
                 "review?",
                 red);
-      if (button("Confirm reset", {x, y, 180, 46}, true)) {
+      if (button("Confirm reset", {x, y, 180, 46}, true, true, true, ButtonStyle::Destructive)) {
         if (app.reset()) {
           drafts.clear();
           catalogueScroll.clear();
@@ -1324,13 +1359,8 @@ struct UI {
         resetConfirm = false;
       y += 64;
     }
-    heading("Keyboard & accessibility");
-    paragraph("Use Tab and Shift+Tab to move focus, Enter or Space to activate "
-              "controls, and Page Up / Down to scroll. Input accepts plain "
-              "text answers; use arrows to move the cursor and Shift to "
-              "select. Native VoiceOver access to raylib's custom "
-              "controls is not implemented in this build.",
-              muted, 16);
+    y += 64;
+    x = pageX; width = pageWidth;
   }
   void comparison() {
     auto records = comparisons();
@@ -1746,6 +1776,8 @@ int main(int argc, char **argv) {
       if (reviewTest && !pendingCapture.empty() && (action == 5 || action == 7))
         ui.scroll = ui.maxScroll;
       if (resumeTest == "walk" && !pendingCapture.empty())
+        ui.scroll = ui.maxScroll;
+      if (courseTest && !pendingCapture.empty() && (action == 19 || action == 20))
         ui.scroll = ui.maxScroll;
       if (codeTest && !pendingCapture.empty()) {
         if (action == 2)

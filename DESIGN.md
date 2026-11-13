@@ -44,7 +44,7 @@ The logo returns Home. Lessons, Review, Progress and Compare remain labelled acr
 
 ## Learning panels
 
-Home and Courses share the catalogue. Top navigation, lesson sections and secondary actions use quiet text treatments with hover/focus; primary actions retain periwinkle fill. Selecting a module changes the centre material without replacing the course shell. Lesson stages use an underline instead of large filled tabs. Check answer leads before submission; Try again is shown after a result. Editing history never changes saved evidence.
+Home and Courses share the catalogue. Top navigation and lesson tabs use quiet text treatments with hover/focus. Secondary actions use raised charcoal fills and visible one-pixel boundaries; primary actions retain periwinkle fill. Buttons share an eight-pixel corner radius, pressed and disabled states, hand cursors and a separate keyboard focus ring. Destructive actions use a red semantic treatment. Selecting a module changes the centre material without replacing the course shell. Lesson stages use an underline instead of large filled tabs. Check answer leads before submission; Try again is shown after a result. Editing history never changes saved evidence.
 
 The right-hand Study assistant is explicitly offline. It displays authored notes for reading/summary, or authored hints for the active exercise. Quick prompts and typed messages use the same response path. Free-text prompts advance through authored hints rather than generating a response to arbitrary questions; this is disclosed in the panel. A hint is displayed only after controller help persistence succeeds. It does not grade, execute code or send network requests. Fresh checks with blocked issuance have no assistant reveal. Conversations are session-only, scoped to lesson/stage/question and cleared after a successful progress reset, along with assistant drafts and scroll positions.
 
@@ -59,3 +59,20 @@ A healthy profile has quiet status without an always-present Retry save action. 
 Tab, Shift+Tab, Enter/Space, Escape and macOS answer-editing shortcuts remain. Covered header/footer regions reject pointer activation. Draft editing is single-line ASCII with a 1024-byte limit; Unicode/IME and VoiceOver remain unimplemented. Focus in the broader immediate-mode interface still uses draw indices, so semantic focus restoration across every possible resize is not claimed.
 
 Source of truth is the native renderer and contract tests. Current captures are under `.scratch/course-ui/release-home-captures`, `release-course-captures`, `journey-captures` and `compact-captures`. Automated actions exercise real handlers/input models rather than physical OS key/clipboard events. There is no animation or motion-dependent content to disable.
+
+## Settings refinement — 13 November 2026
+
+Settings uses aligned two-column groups on the existing page surface: Appearance,
+Study assistant, Local progress, Keyboard & access, and Reset progress. Section
+labels and short descriptions occupy a 224-pixel left rail; controls and detail
+text occupy the remaining width. Dividers separate groups without nested cards.
+Appearance includes the current pixel size and a live prose/code preview. Text
+size stays within the existing 16–24 range. Local progress wraps full paths and
+shows Retry save only when a writable profile has unsaved changes. Keyboard help
+is reachable directly. Reset retains inline confirmation and existing storage
+semantics with distinct destructive buttons. Dark colors, course arrangement,
+offline hints and grading behavior are preserved.
+
+Native captures and interaction evidence: `.scratch/modern-ui` and
+`.scratch/modern-ui-confirm`. Automated journeys exercise real handlers and
+pointer hit geometry; they do not establish native VoiceOver support.
