@@ -1,4 +1,5 @@
 #include "text_input.hpp"
+#include "keyboard_input.hpp"
 #include <iostream>
 #include <stdexcept>
 using cw::TextInput;
@@ -9,6 +10,14 @@ void require(bool condition, const char *reason) {
 int main() {
   try {
     TextInput input;
+    cw::KeyboardModifiers shortcut{true, true, false, false};
+    require(!cw::acceptTextCharacter('5', shortcut), "recording shortcut is not answer text");
+    // The OS snapshot after releasing the shortcut must permit typing again,
+    // independently of any cached modifier state held by the event backend.
+    cw::KeyboardModifiers released{};
+    require(cw::acceptTextCharacter('5', released), "released shortcut permits answer typing");
+    require(!cw::acceptTextCharacter(10, released), "text remains single line");
+    require(!cw::acceptTextCharacter(0xE9, released), "ASCII answer contract retained");
     input.insert("coat");
     input.moveTo(2);
     input.insert("d");

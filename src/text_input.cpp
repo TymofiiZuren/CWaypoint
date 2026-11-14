@@ -37,33 +37,31 @@ void TextInput::moveTo(std::size_t position, bool extend) {
   if (!extend)
     anchor = caret;
 }
-void TextInput::move(int direction, bool extend, bool byWord) {
-  if (!direction)
-    return;
-  if (!extend && caret != anchor) {
-    moveTo(direction < 0 ? selectionStart() : selectionEnd());
-    return;
+namespace {
+bool wordCharacter(unsigned char c) { return std::isalnum(c) || c=='_'; }
+size_t previousPosition(const std::string& text,size_t next,bool byWord) {
+  if(next==0) return next;
+  --next;
+  if(byWord) {
+    while(next>0 && !wordCharacter(text[next])) --next;
+    while(next>0 && wordCharacter(text[next-1])) --next;
   }
-  auto next = caret;
-  auto isWord = [](unsigned char c) { return std::isalnum(c) || c == '_'; };
-  if (direction < 0 && next > 0) {
-    --next;
-    if (byWord) {
-      while (next > 0 && !isWord(text[next]))
-        --next;
-      while (next > 0 && isWord(text[next - 1]))
-        --next;
-    }
-  } else if (direction > 0 && next < text.size()) {
-    if (byWord) {
-      while (next < text.size() && !isWord(text[next]))
-        ++next;
-      while (next < text.size() && isWord(text[next]))
-        ++next;
-    } else
-      ++next;
+  return next;
+}
+size_t nextPosition(const std::string& text,size_t next,bool byWord) {
+  if(next>=text.size()) return next;
+  if(!byWord) return next+1;
+  while(next<text.size() && !wordCharacter(text[next])) ++next;
+  while(next<text.size() && wordCharacter(text[next])) ++next;
+  return next;
+}
+}
+void TextInput::move(int direction,bool extend,bool byWord) {
+  if(!direction) return;
+  if(!extend && caret!=anchor) {
+    moveTo(direction<0 ? selectionStart() : selectionEnd()); return;
   }
-  moveTo(next, extend);
+  moveTo(direction<0 ? previousPosition(text,caret,byWord) : nextPosition(text,caret,byWord),extend);
 }
 void TextInput::selectAll() {
   anchor = 0;

@@ -1,6 +1,8 @@
 # Working executable
 
-Current delivery status: 10 November 2026. Four lessons, twelve questions, 36 authored hints, course workspace and version-three activity saves are integrated. Earlier dated increments below retain their historical counts; the final partner-first delivery entry describes the current integration.
+Current delivery status — 14 November 2026: the native reference workspace, editable C/C++ WASI labs, personal study storage and version-four completion receipts are implemented. The Release build, 14 CTest suites, `make test`, wide/compact reference journeys and the CCN ≤15 gate pass. Physical keyboard automation timed out; native input, IME/VoiceOver, other-Mac acceptance and the broader curriculum remain follow-ups. See [the current runtime contract](reference-runtime.md) and [README setup and usage](../README.md).
+
+Previous delivery status — 10 November 2026 (historical): Four lessons, twelve questions, 36 authored hints, course workspace and version-three activity saves are integrated. Earlier dated increments below retain their historical counts; the final partner-first delivery entry describes the current integration.
 
 ## Delivered
 
@@ -124,3 +126,28 @@ Four CTest suites and make test passed after integration. Added explicit version
 The three-hour development journal for Tymofii is under docs/journals, with Markdown source and a visually verified Word copy matching the earlier journal format. Hours are self-reported, not measured. Older untracked 6 November journal files were left outside the delivery commits.
 
 Final delivery verification: all twelve isolated combined executable runs passed (course standard/compact, conditions compact, smoke, guided, review, code, undo and four resume phases). Both app and extracted-app signatures verified. The feature branch contains the partner merge and the tracked three-hour Word/Markdown journal; latest-base ancestry and normal-push ancestry were checked before publication.
+
+## Wide-window button hit testing — 10 November 2026
+
+User-reported unresponsive buttons were reproduced at a 2036-logical-pixel window width. The material panel is laid out across the course workspace, but UI::hit additionally intersected it with the centred, capped catalogue viewport. This excluded visible left-aligned course controls such as Start practice and Check answer on wide windows. The shared hit test now selects the active screen's owning viewport, retaining header/footer, menu and side-panel exclusions.
+
+The new --pointer-test injects a coordinate at each rendered button centre through the normal visibility, clipping and click path, rather than using label-based activation. Before the fix it failed at Start practice; after the fix it completed both-track practice, next-question navigation and the settings menu. Geometry tests cover 960, 1280, 1600, 2036 and 2560 widths and reject side-panel/header/footer hits. Release build, all four CTest suites, the coordinate regression and the twelve existing isolated executable journeys passed. The refreshed packaged copy passed the coordinate journey from /tmp; both signatures and git diff --check passed.
+
+Primary signal is met for the reproduced coordinate/clipping failure. Physical OS clicking remains partially validated: the native window screenshot was available, but the automation click call returned noWindowsAvailable. Running instances must be restarted to load the rebuilt executable. No learning, persistence or theme semantics changed.
+
+## 13 November 2026 — progress reporting and offline validation
+
+- Progress now exports non-overwriting CSV reports with current-revision
+  question evidence, recovered-history and unsaved-state labels. Typed answers
+  are excluded. Export errors remain separate from profile-save notices.
+- `--check-content` checks required lessons and optional walkthroughs/comparisons
+  before creating a profile or initializing raylib. Exit codes are documented in
+  README. No network service or new production dependency was added.
+- Six CTest suites pass, including report escaping, revision filtering,
+  recovered history, unsaved state, file preservation and export failures.
+- The automated smoke journey activated the export control, generated twelve
+  rows and captured the success message. Headless checking reported four
+  lessons, twelve questions, thirty-six hints and three comparisons with no
+  warnings, and created no profile. macOS bundle signature verified.
+- Reports are snapshots, not backups. Intel/second-Mac testing and recording-time
+  keyboard verification remain outside this milestone.

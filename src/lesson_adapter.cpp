@@ -9,6 +9,14 @@ void require(bool ok) {
   if (!ok)
     throw std::invalid_argument("Unsupported authored variables lesson contract");
 }
+void validateExercise(const cwaypoint::Exercise& exercise,const std::string& id,cwaypoint::ExerciseType type,bool fresh) {
+    require(exercise.id == id && exercise.type == type &&
+            exercise.fresh_check == fresh &&
+            exercise.accepted.size() == 1 &&
+            !blank(exercise.accepted[0]) && exercise.accepted[0].size() <= 1024 &&
+            !blank(exercise.prompt) &&
+            !blank(exercise.explanation) && exercise.hints.size() == 3);
+}
 } // namespace
 Lesson adaptVariablesLesson(const cwaypoint::Lesson &source) {
   // Author revision 1 maps intentionally to application assessment revision 2.
@@ -32,12 +40,7 @@ Lesson adaptVariablesLesson(const cwaypoint::Lesson &source) {
     const auto &exercise = source.exercises[i];
     auto expectedType = i == 1 ? cwaypoint::ExerciseType::FillToken
                               : cwaypoint::ExerciseType::PredictOutput;
-    require(exercise.id == authoredIds[i] && exercise.type == expectedType &&
-            exercise.fresh_check == (i == 2) &&
-            exercise.accepted.size() == 1 &&
-            !blank(exercise.accepted[0]) && exercise.accepted[0].size() <= 1024 &&
-            !blank(exercise.prompt) &&
-            !blank(exercise.explanation) && exercise.hints.size() == 3);
+    validateExercise(exercise,authoredIds[i],expectedType,i==2);
     Question question;
     question.id = applicationIds[i];
     question.prompt = exercise.prompt;

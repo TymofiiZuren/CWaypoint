@@ -1,3 +1,5 @@
+> **14 November 2026 implementation update:** The approved reference design and real isolated WASI compile/run are now the default application. See [current runtime and UI contracts](docs/reference-runtime.md). Earlier non-execution and Study assistant descriptions below apply to the retained legacy diagnostic renderer; the production right pane is the C/C++ workbench. Discussion is explicitly offline.
+
 ---
 name: CWaypoint
 description: A dark desktop study workspace for C and C++.
@@ -16,7 +18,7 @@ colors:
 
 # CWaypoint dark study workspace
 
-The implemented direction is a charcoal course workspace with top navigation, a CWaypoint monogram Home link, a drawn gear menu, course cards and fixed rounded internal panels. This replaces the former light sidebar design. UI/UX Pro Max's verified dark-mode style guidance informed the neutral layering and contrast; its broad light education/marketing recommendation was rejected as unsuitable for this native learning app. No web framework, font download or icon package was added.
+The implemented direction is a charcoal course workspace with top navigation, a CWaypoint monogram Home link, a drawn gear menu, course rows and fixed rounded internal panels. This replaces the former light sidebar design. UI/UX Pro Max's verified dark-mode style guidance informed the neutral layering and contrast; its broad light education/marketing recommendation was rejected as unsuitable for this native learning app. No web framework, font download or icon package was added.
 
 ## Colors and hierarchy
 
@@ -30,9 +32,9 @@ Use the installed macOS Arial and Andale Mono fonts without redistributing them.
 
 ## Window and layout
 
-The window opens at 1280×840 with a 960×640 minimum. Top navigation occupies 80 logical pixels. Content is clipped below y=88 and above the 48-high status area. Workspace width is min(1200, window width minus 64), centered. `src/ui_layout.hpp` owns these measured geometry rules and pointer boundaries.
+The window opens at 1280×840 with a 960×640 minimum. Top navigation occupies 80 logical pixels. Main content is clipped from y=104 to window height−76, inside the rounded page panel and above the 48-high status area. Workspace width is min(1200, window width minus 64), centered. `src/ui_layout.hpp` owns these measured geometry rules and pointer boundaries.
 
-Home and Courses show both C and C++ course cards in one catalogue. Current lessons are the modules: C has variables, pointers and conditions; C++ has strings. Counts derive from the actual catalogue and practice completion; there are no placeholder curriculum totals. Course cards open the first unfinished module, or the first module when the track is complete. Continue restores the saved position.
+Home and Courses show both C and C++ course cards in one catalogue. Current lessons are the modules: C has variables, pointers and conditions; C++ has strings. Counts derive from the actual catalogue and practice completion; there are no placeholder curriculum totals. Course rows open the first unfinished module, or the first module when the track is complete. Continue restores the saved position.
 
 Course screens use three columns at both supported window sizes: a 160/192-wide module list on the left, material in the centre and a 224/280-wide study assistant on the right. `courseLayout()` in `src/ui_layout.hpp` owns this geometry. The centre remains at least 400 logical pixels wide at tested sizes. Material has its own main scroll; assistant transcript/hint options have a bounded scroll region and an anchored message field/Send action. The module list now has its own clipped scroll region, selected-module reveal and a fixed All courses action. Code preserves independent horizontal reading controls.
 
@@ -44,7 +46,7 @@ The logo returns Home. Lessons, Review, Progress and Compare remain labelled acr
 
 ## Learning panels
 
-Home and Courses share the catalogue. Top navigation, lesson sections and secondary actions use quiet text treatments with hover/focus; primary actions retain periwinkle fill. Selecting a module changes the centre material without replacing the course shell. Lesson stages use an underline instead of large filled tabs. Check answer leads before submission; Try again is shown after a result. Editing history never changes saved evidence.
+Home and Courses share the catalogue. Top navigation and lesson tabs use quiet text treatments with hover/focus. Secondary actions use raised charcoal fills and visible one-pixel boundaries; primary actions retain periwinkle fill. Buttons share an eight-pixel corner radius, pressed and disabled states, hand cursors and a separate keyboard focus ring. Destructive actions use a red semantic treatment. Selecting a module changes the centre material without replacing the course shell. Lesson stages use an underline instead of large filled tabs. Check answer leads before submission; Try again is shown after a result. Editing history never changes saved evidence.
 
 The right-hand Study assistant is explicitly offline. It displays authored notes for reading/summary, or authored hints for the active exercise. Quick prompts and typed messages use the same response path. Free-text prompts advance through authored hints rather than generating a response to arbitrary questions; this is disclosed in the panel. A hint is displayed only after controller help persistence succeeds. It does not grade, execute code or send network requests. Fresh checks with blocked issuance have no assistant reveal. Conversations are session-only, scoped to lesson/stage/question and cleared after a successful progress reset, along with assistant drafts and scroll positions.
 
@@ -59,3 +61,53 @@ A healthy profile has quiet status without an always-present Retry save action. 
 Tab, Shift+Tab, Enter/Space, Escape and macOS answer-editing shortcuts remain. Covered header/footer regions reject pointer activation. Draft editing is single-line ASCII with a 1024-byte limit; Unicode/IME and VoiceOver remain unimplemented. Focus in the broader immediate-mode interface still uses draw indices, so semantic focus restoration across every possible resize is not claimed.
 
 Source of truth is the native renderer and contract tests. Current captures are under `.scratch/course-ui/release-home-captures`, `release-course-captures`, `journey-captures` and `compact-captures`. Automated actions exercise real handlers/input models rather than physical OS key/clipboard events. There is no animation or motion-dependent content to disable.
+
+## Settings refinement — 13 November 2026
+
+Settings uses aligned two-column groups on the existing page surface: Appearance,
+Study assistant, Local progress, Keyboard & access, and Reset progress. Section
+labels and short descriptions occupy a 224-pixel left rail; controls and detail
+text occupy the remaining width. Dividers separate groups without nested cards.
+Appearance includes the current pixel size and a live prose/code preview. Text
+size stays within the existing 16–24 range. Local progress wraps full paths and
+shows Retry save only when a writable profile has unsaved changes. Keyboard help
+is reachable directly. Reset retains inline confirmation and existing storage
+semantics with distinct destructive buttons. Dark colors, course arrangement,
+offline hints and grading behavior are preserved.
+
+Native captures and interaction evidence: `.scratch/modern-ui` and
+`.scratch/modern-ui-confirm`. Automated journeys exercise real handlers and
+pointer hit geometry; they do not establish native VoiceOver support.
+
+### Font-size dropdown and settings shortcuts
+
+Appearance uses a single selector with 16, 18, 20, 22 and 24 px options. The
+selected size is marked and saved through the existing controller; the reading
+preview updates immediately. The popup draws after page clipping, blocks
+underlying controls, follows its anchor on resize, and stays within the window.
+Arrow keys and Tab cycle options; Enter/Space select. Escape, outside click or
+scroll dismiss the popup. Focus returns to its field after selection or Escape.
+Local progress links directly to the Progress screen.
+
+## Learning-first course overview
+
+The catalogue uses full-width course rows: a language tile, course description,
+current module completion and available module names, plus a right-aligned Open
+course action. A saved lesson exposes Continue learning above the list. Row
+separators replace nested course cards; the charcoal/periwinkle system, top
+navigation and three-panel lesson workspace remain. Progress groups module
+results by language course, with practice counts, fresh-check status and a
+detailed module summary action. CSV controls and export notices have been
+removed from the application. Screenshot evidence: `.scratch/learning-design`.
+
+## Tool-assisted usability verification
+
+Course progress explicitly labels solved practice questions alongside module
+completion. Main-page drawing and hit testing share the inset viewport from
+`src/ui_layout.hpp`: y=104 through window height−76. Code and answer-field clips
+use the same bounds, and keyboard focus reveals controls within the inset.
+Side panels retain their independent viewport and anchored controls. This keeps
+scrolling material inside rounded surfaces. UI/UX Pro Max's progress/focus
+searches and Impeccable's Operate guidance informed this refinement; it does not
+establish native accessibility compliance. Evidence and complexity policy are
+recorded in `docs/code-quality.md`.

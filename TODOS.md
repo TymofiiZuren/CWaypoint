@@ -11,3 +11,11 @@ Planning output from autoplan on 6 November 2026. No implementation or external 
 
 ## Explicitly outside approved first version
 Arbitrary learner-code execution/sandboxing, accounts, cloud sync, leaderboards, mobile/Windows/Linux support, hosted backend/telemetry, CI/CD and public release/signing infrastructure. These are exclusions, not promises to build them later. Reconsider only on a new user instruction.
+
+## Reference-design review — approved 14 November 2026
+
+The approved request reopens real learner-code execution, superseding that item in the earlier first-version exclusions. It does not reopen hosted services, accounts, extra-language curricula or release automation. See `docs/reference-design-build-plan.md` for the implementation and test contracts.
+
+- **Completed 14 November 2026 — Runner feasibility, first implementation gate.** The user-approved WASI SDK 34 and Wasmtime 50.0.1 are bundled behind a signed App Sandbox helper. Real C/C++ fixtures and concrete resource, filesystem/environment-denial and cancellation checks pass; no unrestricted native-execution fallback was added. See `docs/reference-runtime.md` for the implemented boundary and verification limits. Owner: application work.
+- **P2 Shared Discussion service deferred.** The requested tab is designed as explicitly offline with a Notes shortcut. Real shared discussions require an approved service, identity/moderation/privacy and dependency contract; no fake people/posts. Revisit if the user chooses that scope at final approval. Human effort: large; assisted estimate unvalidated; blocked on explicit service decision.
+- Existing device baseline, native accessibility/IME, curriculum acceptance and font licensing prerequisites above remain relevant; reuse those follow-ups rather than duplicate them.

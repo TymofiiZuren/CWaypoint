@@ -7,7 +7,7 @@ Time spent: 3 hours
 
 ## Work completed
 
-Today I used Codex assistance to redesign the C++17 and Raylib application, improve course navigation and combine my work with Oleksandr’s latest contribution while preserving saved learning evidence.
+Today I used AI assistance to redesign the C++17 and Raylib application, improve course navigation and combine my work with Oleksandr’s latest contribution while preserving saved learning evidence.
 
 ## Course catalogue and learning workspace
 
@@ -19,7 +19,7 @@ I connected Oleksandr’s variables lesson through a validated adapter. Stable a
 
 ## Team integration and merge checks
 
-Oleksandr’s pull request 3 was merged first after testing. Codex resolved conflicts in the interface and catalogue, retaining my workspace alongside his conditions lesson and daily streak tracking. I added module-list scrolling so the new lesson stays reachable.
+Oleksandr’s pull request 3 was merged first after testing. AI assistance helped resolve conflicts in the interface and catalogue, retaining my workspace alongside his conditions lesson and daily streak tracking. I added module-list scrolling so the new lesson stays reachable.
 
 ## Development checks
 
@@ -35,4 +35,4 @@ Result: Checked the partner PR, resolved conflicts, tested integration and prepa
 
 ## Outcome
 
-The combined application is usable locally and prepared for a reviewed feature pull request after the partner merge. Next are native input testing, more curriculum and a live AI provider decision. Codex assisted with code, tests, Git operations and this journal. The three-hour total is my reported time.
+The combined application is usable locally and prepared for a reviewed feature pull request after the partner merge. Next are native input testing, more curriculum and a live AI provider decision. AI assistance was used for code, tests, Git operations and this journal. The three-hour total is my reported time.

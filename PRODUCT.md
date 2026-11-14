@@ -1,3 +1,5 @@
+> **14 November 2026 implementation update:** The approved reference design and real isolated WASI compile/run are now the default application. See [current runtime and UI contracts](docs/reference-runtime.md). Earlier non-execution and Study assistant descriptions below apply to the retained legacy diagnostic renderer; the production right pane is the C/C++ workbench. Discussion is explicitly offline.
+
 # CWaypoint
 
 CWaypoint is an academic macOS desktop application for a beginner learning C and C++ in separate tracks. The application is implemented in C++17 with raylib. Its central learning flow is explanation → prediction/practice → feedback → fresh check → summary, with local progress and optional help.

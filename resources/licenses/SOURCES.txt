@@ -1,0 +1,9 @@
+WASI-SDK-LICENSE https://raw.githubusercontent.com/WebAssembly/wasi-sdk/wasi-sdk-34/LICENSE
+LLVM-LICENSE https://raw.githubusercontent.com/llvm/llvm-project/895aa2c896ada719451be2e3673c83da8ddf1141/LICENSE.TXT
+WASI-LIBC-LICENSE https://raw.githubusercontent.com/WebAssembly/wasi-libc/2e6fb9d8ee0cdf9e431fbcabe8af3115de000a13/LICENSE
+WASI-LIBC-LICENSE-APACHE-LLVM https://raw.githubusercontent.com/WebAssembly/wasi-libc/2e6fb9d8ee0cdf9e431fbcabe8af3115de000a13/LICENSE-APACHE-LLVM
+WASI-LIBC-LICENSE-APACHE https://raw.githubusercontent.com/WebAssembly/wasi-libc/2e6fb9d8ee0cdf9e431fbcabe8af3115de000a13/LICENSE-APACHE
+WASI-LIBC-LICENSE-MIT https://raw.githubusercontent.com/WebAssembly/wasi-libc/2e6fb9d8ee0cdf9e431fbcabe8af3115de000a13/LICENSE-MIT
+WASI-LIBC-libc-bottom-half-cloudlibc-LICENSE https://raw.githubusercontent.com/WebAssembly/wasi-libc/2e6fb9d8ee0cdf9e431fbcabe8af3115de000a13/libc-bottom-half/cloudlibc/LICENSE
+WASI-LIBC-libc-top-half-musl-COPYRIGHT https://raw.githubusercontent.com/WebAssembly/wasi-libc/2e6fb9d8ee0cdf9e431fbcabe8af3115de000a13/libc-top-half/musl/COPYRIGHT
+WASI-LIBC-fts-musl-fts-COPYING https://raw.githubusercontent.com/WebAssembly/wasi-libc/2e6fb9d8ee0cdf9e431fbcabe8af3115de000a13/fts/musl-fts/COPYING

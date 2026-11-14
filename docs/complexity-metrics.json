@@ -1,0 +1,32 @@
+{
+  "baseline_commit": "d496bcc",
+  "scope": "All C, C++, Objective-C and Objective-C++ source/header functions under src; no function exclusions",
+  "tools": {
+    "lizard": "1.26.0",
+    "scc": "4.1.0"
+  },
+  "lizard": {
+    "before": {
+      "functions": 113,
+      "maximum": 288,
+      "limit": 15,
+      "above_limit": 17
+    },
+    "after": {
+      "functions": 230,
+      "maximum": 15,
+      "limit": 15,
+      "above_limit": 0
+    }
+  },
+  "scc": {
+    "before": {
+      "code_lines": 3229,
+      "file_complexity_estimate": 1249
+    },
+    "after": {
+      "code_lines": 3473,
+      "file_complexity_estimate": 1123
+    }
+  }
+}
