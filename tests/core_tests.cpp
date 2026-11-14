@@ -176,6 +176,16 @@ int main() {
       check(std::filesystem::exists(dir / "generation-2.save.preserved-1"),
             "damaged primary preserved before replacement");
     }
+    {
+      std::ofstream f(dir / "generation-2.save", std::ios::trunc);
+      f << "CWPROFILE 4 2\ntruncated";
+    }
+    {
+      Store store(dir);
+      Controller c(lessons, store);
+      check(store.writable() && c.profile.recovered, "current v4 header recovers valid backup");
+      check(c.save(), "recovered v4 session saves");
+    }
     auto reviewDir = dir / "review";
     {
       Store store(reviewDir);

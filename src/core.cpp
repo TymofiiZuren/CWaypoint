@@ -308,8 +308,7 @@ Profile Store::load() {
     std::ifstream header(primary);
     std::string magic;
     int version = 0;
-    if (header >> magic >> version && magic == "CWPROFILE" && version != 1 &&
-        version != 2 && version != 3) {
+    if (header >> magic >> version && magic == "CWPROFILE" && (version < 1 || version > 4)) {
       canWrite = false;
       message = "This progress needs a different app version. Files preserved; "
                 "temporary practice is available.";
