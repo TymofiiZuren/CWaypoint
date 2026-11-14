@@ -29,5 +29,6 @@ int main(){
  auto numbers=lexCxx("1e-3 + 2+3");check(numbers.size()==5&&numbers[0].length==4&&numbers[3].kind==SyntaxKind::Plain);
  e.set("if (x) {    }");e.moveTo(e.value().find('{')+1);e.newline();check(e.value()=="if (x) {\n    \n}");
  e.set("x");e.moveTo(1);e.indent(false);e.indent(true);e.undo();check(e.value()=="x");
+ e.set("void f() {\n    auto s = R\"(\n        ");e.moveTo(e.value().size());e.typeCharacter('}');check(e.value()=="void f() {\n    auto s = R\"(\n        }");
  std::cout<<"Multiline editing contracts passed\n";
 }

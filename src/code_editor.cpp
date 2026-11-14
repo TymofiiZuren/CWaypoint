@@ -57,9 +57,19 @@ std::string leadingIndent(const std::string& s,size_t start){size_t end=start;wh
 std::string codeOnly(const std::string& s){
  std::string result=s;for(const auto& t:lexCxx(s))if(t.kind==SyntaxKind::String||t.kind==SyntaxKind::Comment||t.kind==SyntaxKind::Directive)result.replace(t.start,t.length,t.length,' ');return result;
 }
-bool insideComment(const std::string& source,size_t end){
+bool openString(const std::string& source,const SyntaxToken& token,size_t end){
+ if(source.compare(token.start,2,"R\"")==0){
+  auto open=source.find('(',token.start+2);if(open>=end)return true;
+  auto marker=")"+source.substr(token.start+2,open-token.start-2)+"\"";
+  return end<marker.size()||source.compare(end-marker.size(),marker.size(),marker)!=0;
+ }
+ char quote=source[token.start];for(size_t i=token.start+1;i<end;++i){if(source[i]=='\\'){++i;continue;}if(source[i]==quote)return false;}return true;
+}
+bool insideLiteral(const std::string& source,size_t end){
  auto tokens=lexCxx(source.substr(0,end));if(tokens.empty())return false;auto token=tokens.back();
- if(token.kind!=SyntaxKind::Comment||token.start+token.length!=end)return false;
+ if(token.start+token.length!=end)return false;
+ if(token.kind==SyntaxKind::String)return openString(source,token,end);
+ if(token.kind!=SyntaxKind::Comment)return false;
  return source.compare(token.start,2,"//")==0||source.compare(end>=2?end-2:0,2,"*/")!=0;
 }
 std::string closingIndent(const std::string& s,size_t end){
@@ -132,7 +142,7 @@ void CodeEditor::newline(){
 bool CodeEditor::typeCharacter(char c){
  auto start=startOfLine(state.text,state.caret);auto prefix=state.text.substr(start,state.caret-start);
  if(c!='}'||!selected().empty()||prefix.find_first_not_of(" \t")!=prefix.npos)return insert(std::string(1,c));
- if(insideComment(state.text,state.caret))return insert("}");
+ if(insideLiteral(state.text,state.caret))return insert("}");
  auto addition=closingIndent(state.text,state.caret)+"}";if(state.text.size()-prefix.size()+addition.size()>65536)return false;
  replace(start,state.caret,addition);return true;
 }
