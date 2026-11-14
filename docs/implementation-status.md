@@ -1,6 +1,8 @@
 # Working executable
 
-Current delivery status: 10 November 2026. Four lessons, twelve questions, 36 authored hints, course workspace and version-three activity saves are integrated. Earlier dated increments below retain their historical counts; the final partner-first delivery entry describes the current integration.
+Current delivery status — 14 November 2026: the native reference workspace, editable C/C++ WASI labs, personal study storage and version-four completion receipts are implemented. The Release build, 14 CTest suites, `make test`, wide/compact reference journeys and the CCN ≤15 gate pass. Physical keyboard automation timed out; native input, IME/VoiceOver, other-Mac acceptance and the broader curriculum remain follow-ups. See [the current runtime contract](reference-runtime.md) and [README setup and usage](../README.md).
+
+Previous delivery status — 10 November 2026 (historical): Four lessons, twelve questions, 36 authored hints, course workspace and version-three activity saves are integrated. Earlier dated increments below retain their historical counts; the final partner-first delivery entry describes the current integration.
 
 ## Delivered
 
