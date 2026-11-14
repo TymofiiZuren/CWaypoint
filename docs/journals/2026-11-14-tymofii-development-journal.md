@@ -1,4 +1,4 @@
-# CWaypoint Development Journal
+# Development Journal
 
 Tymofii Mazurenko  
 CWaypoint  
