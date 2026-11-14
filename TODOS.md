@@ -11,3 +11,11 @@ Planning output from autoplan on 6 November 2026. No implementation or external 
 
 ## Explicitly outside approved first version
 Arbitrary learner-code execution/sandboxing, accounts, cloud sync, leaderboards, mobile/Windows/Linux support, hosted backend/telemetry, CI/CD and public release/signing infrastructure. These are exclusions, not promises to build them later. Reconsider only on a new user instruction.
+
+## Reference-design review — pending final approval (13 November 2026)
+
+The new request explicitly reopens real learner-code execution, superseding that item in the earlier first-version exclusions once this plan is approved. It does not reopen hosted services, accounts, extra-language curricula or release automation. See `docs/reference-design-build-plan.md` for the implementation and test contracts.
+
+- **P1 Runner feasibility, first implementation gate.** Prove a signed isolated helper can compile/run C/C++ and enforce resource/control-channel/child cleanup boundaries. Existing restrictive sandbox-exec compiler probes aborted before diagnostics; no unsafe fallback is authorized. Owner: application work; blocked on implementation proof, not a fake Run UI.
+- **P2 Shared Discussion service deferred.** The requested tab is designed as explicitly offline with a Notes shortcut. Real shared discussions require an approved service, identity/moderation/privacy and dependency contract; no fake people/posts. Revisit if the user chooses that scope at final approval. Human effort: large; assisted estimate unvalidated; blocked on explicit service decision.
+- Existing device baseline, native accessibility/IME, curriculum acceptance and font licensing prerequisites above remain relevant; reuse those follow-ups rather than duplicate them.
