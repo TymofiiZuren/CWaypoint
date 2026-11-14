@@ -9,7 +9,7 @@ void validateOptions(const AppOptions& o,const std::string& defaultProfile) {
   const std::set<std::string> phases{"","seed","question","walk-seed","walk"};
   if(!screens.count(o.initial)) throw std::runtime_error("Unknown initial screen: "+o.initial);
   if(!phases.count(o.resumeTest)) throw std::runtime_error("Unknown resume test phase.");
-  if(o.smoke && o.profile==defaultProfile) throw std::runtime_error("Smoke test requires an isolated --data-dir.");
+  if((o.smoke || o.referenceTest) && o.profile==defaultProfile) throw std::runtime_error("Smoke test requires an isolated --data-dir.");
 }
 bool hasJourney(const AppOptions& o) {
   const bool flags[]={o.guided,o.reviewTest,o.codeTest,o.undoTest,o.authoredTest,o.courseTest,o.conditionsTest,o.pointerTest,o.settingsTest};
@@ -20,6 +20,7 @@ bool hasJourney(const AppOptions& o) {
 AppOptions parseOptions(const std::vector<std::string>& args,const std::string& defaultProfile) {
   AppOptions o; o.profile=defaultProfile;
   const std::map<std::string,bool AppOptions::*> flags{
+    {"--reference-test",&AppOptions::referenceTest},{"--check-runner",&AppOptions::checkRunner},
     {"--check-content",&AppOptions::checkContent},{"--help",&AppOptions::help},
     {"--compact",&AppOptions::compact},{"--large-text",&AppOptions::largeText},
     {"--smoke-test",&AppOptions::smoke},{"--guided-test",&AppOptions::guided},
@@ -40,7 +41,7 @@ AppOptions parseOptions(const std::vector<std::string>& args,const std::string& 
   return o;
 }
 std::string commandHelp() {
-  return "CWaypoint [--check-content] [--data-dir PATH] [--capture-dir PATH] "
+  return "CWaypoint [--check-runner] [--reference-test] [--check-content] [--data-dir PATH] [--capture-dir PATH] "
     "[--screen home|lesson|review|settings|progress|compare] "
     "[--settings-test|--pointer-test|--conditions-test|--course-test|--smoke-test|--guided-test|--review-test|--code-test|--undo-test|--authored-test] "
     "[--resume-test seed|question|walk-seed|walk]\n";

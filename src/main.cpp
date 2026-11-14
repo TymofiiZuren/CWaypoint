@@ -1,3 +1,4 @@
+#include "reference_app.hpp"
 #include "core.hpp"
 #include "app_options.hpp"
 #include "streak_icon.hpp"
@@ -2148,6 +2149,14 @@ void openInitialScreen(UI& ui,const std::string& initial) {
       ui.go(Screen::Compare);
 }
 } // namespace
+void prepareDiagnosticLessons(std::vector<cw::Lesson>& lessons,bool guided,bool codeTest){
+    if (guided)
+      lessons[2].steps[0].state.clear();
+    if (codeTest) {
+      lessons[0].code += "\n// " + std::string(140, 'x');
+      lessons[0].steps[0].code += " // " + std::string(140, 'y');
+    }
+}
 int main(int argc, char **argv) {
   try {
     const auto options = parseOptions(std::vector<std::string>(argv+1,argv+argc), defaultProfile().string());
@@ -2159,17 +2168,13 @@ int main(int argc, char **argv) {
       checkContent=options.checkContent;
     const auto& initial=options.initial;
     if (checkContent) return checkAuthoredContent();
+    if(options.checkRunner) return checkPackagedRunner();
     if (!capture.empty())
       std::filesystem::create_directories(capture);
     auto lessons = sampleLessons();
     // Isolated guided test verifies that an optional bad record cannot block
     // practice.
-    if (guided)
-      lessons[2].steps[0].state.clear();
-    if (codeTest) {
-      lessons[0].code += "\n// " + std::string(140, 'x');
-      lessons[0].steps[0].code += " // " + std::string(140, 'y');
-    }
+    prepareDiagnosticLessons(lessons,guided,codeTest);
     auto error = validate(lessons);
     if (!error.empty())
       throw std::runtime_error(error);
@@ -2181,6 +2186,7 @@ int main(int argc, char **argv) {
     }
     if (codeTest || largeText)
       controller.setTextSize(24);
+    if(!options.smoke) return runReferenceApp(options,lessons,store,controller);
     openWindow(options);
     UI ui(lessons, store, controller);
     ui.pointerHitTest = pointerTest || settingsTest;

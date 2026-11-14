@@ -6,9 +6,10 @@ void check(bool value) { if(!value) throw std::runtime_error("option assertion f
 int main() {
   auto o=parseOptions({"--data-dir","isolated","--settings-test","--compact"},"default");
   check(o.profile=="isolated" && o.smoke && o.settingsTest && o.compact);
+  check(parseOptions({"--data-dir","isolated","--reference-test"},"default").referenceTest);
   check(parseOptions({"--check-content"},"default").checkContent);
   check(parseOptions({"--help"},"default").help);
-  for(const auto& args : std::vector<std::vector<std::string>>{{"--data-dir"},{"--screen","unknown"},{"--unknown"},{"--smoke-test"},{"--resume-test","bad"}}) {
+  for(const auto& args : std::vector<std::vector<std::string>>{{"--data-dir"},{"--screen","unknown"},{"--unknown"},{"--smoke-test"},{"--reference-test"},{"--resume-test","bad"}}) {
     bool failed=false;
     try { parseOptions(args,"default"); } catch(const std::runtime_error&) { failed=true; }
     check(failed);

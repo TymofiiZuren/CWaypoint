@@ -89,3 +89,16 @@ A later wide-window confirmation detected macOS restoring a narrower frame. The
 pointer test now waits for and requests the required geometry with a bounded
 timeout; the width assertion remains. The targeted pointer and course journeys
 were rerun after this harness correction. Normal window behaviour is unchanged.
+
+
+## Reference application — 14 November 2026
+
+The native reference renderer, sandbox helper, multiline editor, personal storage and lab execution modules now measure 408 application functions with maximum Lizard CCN 15 and zero violations. `make quality PYTHON=.scratch/complexity-tools/bin/python` passes, including four gate tests.
+
+scc 4.1 reports 30 source/header files, 4674 total lines, 4633 code lines and aggregate file-level complexity 1743. That aggregate is a different measure from the per-function Lizard limit.
+
+Validation: 14 CTest suites pass; production wide and compact reference journeys verify saved completion, notes, bookmark, preferences, search and stale-result invalidation. Ten retained legacy feature journeys and four resume phases pass. The walkthrough-resume fixture initially omitted its saved-lesson prerequisite; reseeding and both walkthrough phases passed. The outdated lab-revision receipt test failed before the controller fix and passes afterward. Native keyboard/recording behavior and VoiceOver are not certified by these synthetic journeys.
+
+The expanded stale-result journey exposed a responsive test-driver issue: after a native window enters compact mode, every code action must reopen the Code tab. The driver now uses the actual layout for all code actions, isolates synthetic input from live input, and captures failure state. Both layouts passed after that harness correction.
+
+The final wide reference journey also enforces a width of at least 1280 px through bounded geometry settling, preventing macOS frame restoration from silently turning the wide check into a compact check.

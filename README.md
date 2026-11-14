@@ -1,116 +1,67 @@
 # CWaypoint
 
-A C++17 / raylib desktop app for learning C and C++, built for macOS.
+A native Apple Silicon macOS application for learning C and C++, written in C++17 with raylib.
 
-## Run the application
+## Run
 
-Open `build/CWaypoint.app` in Finder, or run:
+Open `cmake-build-milestone/CWaypoint.app` in Finder. The bundle includes raylib, WASI SDK 34 and Wasmtime 50.0.1; using a built app requires neither Homebrew nor an internet connection. This is an ad hoc signed local build, not a notarized public release.
 
-```sh
-open build/CWaypoint.app
-```
+## Learning workspace
 
-The current build is for Apple Silicon. raylib is embedded in the app bundle, so the built application does not need Homebrew to run. The app uses macOS system fonts and bundled-in-code starter content, and can launch from any working directory. This is a local, ad hoc signed build; it is not notarized for public distribution.
+- **My learning / All courses:** resume the saved lesson, search the C/C++ catalogue, open course modules and revisit bookmarked lessons.
+- **Learn:** read material, solve two practice questions, attempt an independently recorded fresh check, view authored hints and inspect assessment status.
+- **Code:** edit a complete C17/C++17 program, run the bundled compiler, inspect output and two authored tests. Complete a lesson after solving both practice questions and passing the current lab.
+- **Notes:** private multiline lesson notes, saved locally. Discussion explicitly reports that shared discussions are unavailable offline.
+- **Settings:** display name, daily goal, editor light/dark theme, numeric font sizes, daily nudge and reading size. Preferences use Save/Cancel, with a guard when leaving an edited form.
+- **Progress / Review / Compare:** available under Settings → Learning data, reading size & help. CSV export is absent from the interface.
 
-## Build and test
+The wide lesson screen has a module rail, material and editor side by side. Below 1280 px it uses a module drawer and Material/Code tabs. Minimum window size is 960 × 640. Scroll the material or page to reach additional controls. Shift-scroll moves horizontally in the editor. Escape releases editor focus; Tab then moves between controls. Standard Command-A/C/X/V/Z editor shortcuts are supported. Text input currently supports ASCII; native IME and VoiceOver integration remain future work.
 
-Prerequisites: Apple command line tools, CMake, pkg-config and raylib. The implementation uses the raylib already installed on the development machine; no dependencies are downloaded by the build.
+The catalogue contains three C modules (variables, pointers, conditions) and one C++ strings module. Curriculum totals reflect those available modules. More languages, online accounts and live AI are outside this build.
 
-```sh
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build -j4
-ctest --test-dir build --output-on-failure
-open build/CWaypoint.app
-```
+## Execution boundary
 
-For isolated testing (leaves your normal learner profile untouched):
+Learner source compiles to WebAssembly, not a native macOS executable. An App Sandbox helper invokes the bundled compiler and Wasmtime. Guest programs receive no host directory, environment or network grants. Runs have fuel/time limits, a 64 MiB linear-memory ceiling, bounded output and cancellation. Compilation is separately timed and file-size limited. Filesystem, socket, process and macOS GUI exercises are unsupported.
 
-```sh
-build/CWaypoint.app/Contents/MacOS/CWaypoint --data-dir .scratch/demo-profile
-build/CWaypoint.app/Contents/MacOS/CWaypoint --data-dir .scratch/ui-test-profile --smoke-test
-build/CWaypoint.app/Contents/MacOS/CWaypoint --data-dir .scratch/guided-test-profile --guided-test
-build/CWaypoint.app/Contents/MacOS/CWaypoint --data-dir .scratch/review-test-profile --review-test
-build/CWaypoint.app/Contents/MacOS/CWaypoint --data-dir .scratch/code-test-profile --code-test --compact
-build/CWaypoint.app/Contents/MacOS/CWaypoint --data-dir .scratch/undo-test-profile --undo-test --compact
-```
+Run code during practice/fresh checks records assistance before executing. Compilation alone cannot complete a lesson. Results become stale after source changes; completion stores the source SHA-256, assessment/test revisions and a distinct lesson/day receipt. A failed save is shown instead of claiming durable completion. Tests verify concrete denial cases; they do not constitute a formal security proof.
 
-Use a fresh profile directory for each smoke-test run. `--help` lists diagnostic options. Capture mode renders into a logical-size texture to avoid multiplying Retina scaling during export. Native window screenshots are also used for interface checks.
+## Build
 
-## Working features
-
-- Home, C/C++ lesson catalogue, reading, practice, fresh check, summary, progress, mistake review, comparisons and settings.
-- Undo/redo for text-answer drafts, including selection/cursor restoration and per-question session history.
-- Dedicated mistake-review queue with C/C++ filters, friendly question labels, sequential retries and cleared-item feedback.
-- Same-track next-lesson suggestions on Home and completed summaries; per-question practice status in Progress.
-- Invalid optional walkthrough/comparison records show an unavailable message while valid practice remains usable.
-- Four starter lessons: C variables, C pointers, C conditions and C++ strings. Twelve questions with three offline hint levels each (36 hints).
-- Two authored walkthroughs with Previous / Next / Restart, plus three C/C++ comparisons.
-- Single-choice, output and token answers with feedback, retries and answer reveal.
-- Historical first-attempt independence remains separate from assisted/repeated practice.
-- Local progress, exact practice-question/walkthrough resume after restart, text-size preference, backup recovery, explicit generation-based reset and a single-writer profile lock.
-- Mouse and keyboard controls, scrolling, adjustable lesson text and code, resizable window and system fonts.
-- Independent code-panel scrolling, focusable code with Left/Right and Home/End, scroll buttons, and full-source Copy code / Command+C.
-
-This is the application/UI owner's working increment. The full 14-lesson curriculum, reviewed content inventory, live AI provider/transport and native VoiceOver exposure are not implemented. The app makes no network requests and needs no credentials. Remaining integration work is recorded in [docs/implementation-status.md](docs/implementation-status.md).
-
-## Controls and storage
-
-Tab / Shift+Tab moves focus, Enter / Space activates a button, Escape returns, and Page Up / Down scrolls. In answer fields, click to position the cursor, drag or hold Shift with arrows to select, and use Command+A/C/X/V to select all, copy, cut or paste. Arrow keys, Home/End, Command+Left/Right and Option+Left/Right move the cursor; Backspace/Delete remove text. Use Command+Z / Shift+Command+Z or Undo / Redo to reverse or restore up to 32 text changes in that question. Press Enter to check. Undo changes the draft only; submitted results and attempt counts remain unchanged until an explicit retry. Use the mouse wheel to scroll; either Shift key + wheel scrolls overflowing code horizontally. Code panels also provide scroll buttons; focus a panel to use Left/Right, Home/End or Command+C to copy its full source. Drafts and the current practice question survive navigation within the running session. The catalogue restores its scroll position per track. Drafts are not saved across application restarts. Continue restores the saved question or walkthrough step, and states that position on Home. Version-one and version-two saves are read automatically; the next successful save writes version three with daily activity and preserves a compatible prior snapshot as a backup. Earlier builds preserve unsupported version-three files read-only.
-
-Default progress location: `~/Library/Application Support/CWaypoint`. Use `--data-dir PATH` for disposable demos and tests. Save failures show a persistent notice and Save details; Settings exposes the full message and Retry save for writable profiles. Unsupported or unreadable profiles are preserved; temporary practice remains available, but new fresh checks require writable saved issuance. Reset creates a new generation and does not securely erase previous generations.
-
-## Integration
-
-`src/core.hpp` defines the lesson, question, walkthrough, evaluation and profile contracts. `src/sample_content.cpp` assembles the starter catalogue. The variables entry comes from Oleksandr’s authored `src/learning/lesson.cpp` through the validated `src/lesson_adapter.cpp`; the other starter records remain local. Oleksandr can extend the catalogue and evaluator without changing screen-specific correctness logic. See [docs/content-contracts.md](docs/content-contracts.md).
-
-## Oleksandr's first learning core
-
-The first authored C variables lesson and evaluator are also available as a standalone C++17 handoff in `src/learning/`. Run `make test` to verify that evaluator and compile-check its C example; run `make demo` for a terminal demonstration. See [integration notes](docs/integration.md) and [Friday record](docs/friday-2026-11-06.md). The raylib app now consumes that authored variables lesson through a bounded adapter. Its application assessment revision is 2, so earlier question evidence does not count as completion of the revised assessment. Run the executable with `--data-dir <isolated-folder> --authored-test` to verify the integrated handler journey; add `--compact` for the minimum window size.
-
-### Dark study workspace
-
-The current macOS build uses a dark theme, top navigation, logo Home link and gear menu. Courses use left module navigation, central material/practice and a right offline study assistant at both supported sizes. Module and assistant content have bounded scrolling; hints are requested through the assistant. Save details opens the full recovery message in Settings. See [DESIGN.md](DESIGN.md) for the implemented layout and native-input limitations. `--large-text` is an isolated screenshot/scenario helper for checking the 24px setting.
-
-### Course catalogue and study workspace
-
-Home and Courses now show C foundations and C++ foundations together. Open either course to find modules on the left, course material in the centre and an offline study assistant on the right. The assistant accepts messages and quick prompts, returning authored notes/hints rather than live generated answers; exercise help is recorded before display. Conversations are session-only and cleared on progress reset. Run `--data-dir <isolated-folder> --course-test` (optionally `--compact`) to exercise both courses, module switching, assistant help and reset isolation.
-
-Daily learning streaks record one local-calendar day after correct answers and persist in version-three profiles. The attributed flame badge retains the partner contribution; visual acceptance on the teammate Mac remains pending. Use `--conditions-test` with an isolated profile for the conditions/streak journey.
-
-### Offline content checks
-
-Validate the compiled lesson catalogue without opening a window or creating a
-profile:
+Prerequisites: Apple command line tools, CMake, Python 3 (build only), pkg-config and raylib. The approved pinned lab-tool download is approximately 190 MB compressed; the unpacked app is substantially larger.
 
 ```sh
-./build/CWaypoint.app/Contents/MacOS/CWaypoint --check-content
+python3 scripts/setup_lab_tools.py
+cmake -S . -B cmake-build-milestone -DCMAKE_BUILD_TYPE=Release
+cmake --build cmake-build-milestone -j4
+ctest --test-dir cmake-build-milestone --output-on-failure
+open cmake-build-milestone/CWaypoint.app
 ```
 
-Exit codes: `0` valid content, `1` required-content failure, `2` unavailable
-optional walkthrough/comparison records. The command uses the same validators
-as the application and prints the catalogue counts. This checks authored
-structure, not pedagogical correctness.
+The setup script checks official release SHA-256 digests. CMake packages tools and signs the helper with App Sandbox entitlements. Do not replace this with deep signing that erases helper entitlements. Dependencies and notices are included in `Contents/Resources`.
 
-If Homebrew has replaced raylib since an earlier build, configure a fresh build
-directory (`cmake -S . -B cmake-build-fresh -DCMAKE_BUILD_TYPE=Release`) to avoid
-cached paths to the removed library.
+## Isolated validation
 
-In **Settings → Appearance**, open the font-size selector and choose 16, 18, 20,
-22 or 24 px. The preview updates immediately and the selected size is saved.
-Use arrows or Tab to move through an open list, Enter/Space to select, and Escape
-to cancel. Settings links directly to your learning progress. The isolated
-`--settings-test --data-dir PATH` journey checks all five selections through
-pointer hit geometry and verifies each saved size.
+Use a fresh `.scratch/` directory for each journey. These commands leave the normal learner profile untouched:
 
-The course catalogue uses course rows with available modules, practice completion
-and a saved Continue learning action. Progress is grouped by course, with module
-results and links to detailed summaries. CSV export is no longer offered in the
-application interface.
+```sh
+APP=cmake-build-milestone/CWaypoint.app/Contents/MacOS/CWaypoint
+"$APP" --check-content
+"$APP" --check-runner
+"$APP" --data-dir .scratch/reference-demo --reference-test
+"$APP" --data-dir .scratch/reference-small --reference-test --compact
+"$APP" --data-dir .scratch/screenshot --capture-dir .scratch/screens --screen lesson
+make test
+make quality PYTHON=.scratch/complexity-tools/bin/python
+```
 
-### Complexity policy
+`--reference-test` drives the production reference screens and validates saved practice/lab completion, notes, bookmark, preferences and search. It requires an isolated data directory. Capture mode exports a screenshot and exits; combined with a reference journey it captures the final state. `--screen` also accepts home, settings, progress, review and compare.
 
-Every application function under `src/` must have Lizard CCN ≤ 15, including the
-macOS bridge. Install the pinned development-only tools and run `make quality`;
-see [code quality and measured results](docs/code-quality.md) for exact commands,
-the before/after comparison, scc's separate file-level estimate and validation
-limits. These tools are not required to build or run the app.
+Legacy `--smoke-test`, guided, authored, review, code, undo, course, conditions, pointer, settings and resume journeys retain the previous diagnostic renderer to check its engine adapters. They do **not** validate the new production layout. Core and integration tests are shared by both renderers.
+
+Every application function under `src/` must have Lizard cyclomatic complexity ≤15, including Objective-C++. See `docs/code-quality.md` for pinned development tooling. Lizard and scc are not application runtime dependencies.
+
+## Local data
+
+Normal data lives under `~/Library/Application Support/CWaypoint`. The existing writer lock protects both progress and study data. A second app instance is temporary/read-only. Profile v4 reads versions 1–3 and retains an immutable `.pre-v4` snapshot on upgrade. A separate `study-v1.save` stores preferences, notes, bookmarks and source drafts. Completed source snapshots are immutable and scoped to the reset generation. Reset clears learning evidence and personal lesson state while retaining preferences. No data syncs across devices.
+
+See `docs/reference-runtime.md` for implementation contracts and validation limits, and `docs/reference-design-build-plan.md` for the approved design decisions.

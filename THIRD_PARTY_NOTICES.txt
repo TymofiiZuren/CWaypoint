@@ -21,3 +21,15 @@ Source: https://github.com/twitter/twemoji/blob/master/assets/72x72/1f525.png
 Licensed under Creative Commons Attribution 4.0 International
 https://creativecommons.org/licenses/by/4.0/
 An inactive grayscale rendering is generated in memory.
+
+
+Bundled learning lab tools (approved local native build)
+------------------------------------------------------
+WASI SDK 34: https://github.com/WebAssembly/wasi-sdk/releases/tag/wasi-sdk-34
+LLVM and wasi-libc license texts and source revisions: resources/licenses/.
+These texts are copied to Contents/Resources/LabTools/licenses in the app.
+Wasmtime 50.0.1: https://github.com/bytecodealliance/wasmtime/releases/tag/v50.0.1
+Its upstream LICENSE is copied to Contents/Resources/LabTools/WASMTIME-LICENSE.
+The original tools are redistributed with local ad hoc macOS signatures so the
+compiler/runtime child processes inherit the helper sandbox. No quarantine
+attributes or OS protections are removed.

@@ -45,7 +45,12 @@ struct Evidence {
 };
 int localStudyDay();
 int studyStreak(const std::set<int>& days, int today);
+struct LabResult;
+struct Achievement {int assessment=0,testRevision=0,day=0;std::string sourceHash;};
 struct Profile {
+  bool labMode=false;
+  std::map<std::string,Achievement> achievements;
+  std::set<std::pair<int,std::string>> completionDays;
   std::set<int> studyDays;
   std::map<std::string, Evidence> evidence;
   std::set<std::string> review;
@@ -71,6 +76,7 @@ public:
   Profile load();
   bool save(const Profile &);
   bool reset(Profile &);
+  unsigned long activeGeneration() const {return generation;}
   bool writable() const { return canWrite; }
   const std::string &status() const { return message; }
   const std::filesystem::path &directory() const { return root; }
@@ -102,6 +108,10 @@ public:
   bool resume(int lesson, int step, int question = 0, int walkthrough = 0);
   bool setTextSize(int size);
   bool reset();
+  bool enableLabMode();
+  bool lessonCompleted(int lesson) const;
+  int completedToday(int day=localStudyDay()) const;
+  bool completeLesson(int lesson,const LabResult&,unsigned long generation,int day=localStudyDay());
   bool save() { return persist(); }
 };
 } // namespace cw

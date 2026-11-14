@@ -1,4 +1,5 @@
 #include "core.hpp"
+#include "lab.hpp"
 #include <algorithm>
 #include <cerrno>
 #include <ctime>
@@ -232,6 +233,48 @@ bool readActivity(std::istream& f,Profile& p,int version) {
   }
   return true;
 }
+bool validHash(const std::string& hash){
+ if(hash.size()!=64)return false;
+ for(unsigned char c:hash)if(!std::isxdigit(c))return false;
+ return true;
+}
+bool readAchievements(std::istream& f,Profile& p,int version){
+ if(version<4)return true;
+ std::string tag,id;size_t count;
+ if(!(f>>tag>>p.labMode>>count) || tag!="LAB" || count>100)return false;
+ for(size_t i=0;i<count;++i){
+  Achievement a;
+  if(!(f>>std::quoted(id)>>a.assessment>>a.testRevision>>a.day>>std::quoted(a.sourceHash)))return false;
+  if(id.empty() || id.size()>128 || a.assessment<1 || a.testRevision<1 || a.day<0 || a.day>100000 || !validHash(a.sourceHash) || p.achievements.count(id))return false;
+  p.achievements[id]=a;
+ }
+ return true;
+}
+bool readCompletions(std::istream& f,Profile& p,int version){
+ if(version<4)return true;
+ std::string tag,id;size_t count;int day;
+ if(!(f>>tag>>count) || tag!="COMPLETIONS" || count>5000)return false;
+ for(size_t i=0;i<count;++i){
+  if(!(f>>day>>std::quoted(id)) || day<0 || day>100000 || id.empty() || id.size()>128)return false;
+  if(!p.completionDays.insert({day,id}).second)return false;
+ }
+ return true;
+}
+}
+namespace {
+bool readLabState(std::istream& f,Profile& p,int version){
+ return readAchievements(f,p,version) && readCompletions(f,p,version);
+}
+bool preserveLegacy(const std::filesystem::path& primary,const std::string& bytes){
+ std::istringstream header(bytes);std::string magic;int version=0;header>>magic>>version;
+ if(version>=4)return true;
+ std::error_code ec;auto old=primary;old+=".pre-v4";
+ if(std::filesystem::exists(old,ec))return !ec;
+ return std::filesystem::copy_file(primary,old,std::filesystem::copy_options::none,ec) && !ec;
+}
+}
+namespace {
+bool readProfileBody(std::istream& f,Profile& p,int version){size_t count;return readProfileHeader(f,p,count)&&readEvidence(f,p,count)&&readResume(f,p,version)&&readActivity(f,p,version)&&readLabState(f,p,version);}
 }
 bool Store::readSnapshot(const std::filesystem::path& path,Profile& result) {
   std::error_code ec;
@@ -240,12 +283,9 @@ bool Store::readSnapshot(const std::filesystem::path& path,Profile& result) {
   std::ifstream f(path);
   std::string magic; unsigned long gen; int version;
   if (!(f >> magic >> version >> gen) || magic!="CWPROFILE" || gen!=generation) return false;
-  if (version<1 || version>3) return false;
-  Profile p; size_t count;
-  if (!readProfileHeader(f,p,count)) return false;
-  if (!readEvidence(f,p,count)) return false;
-  if (!readResume(f,p,version)) return false;
-  if (!readActivity(f,p,version)) return false;
+  if (version<1) return false;
+  if (version>4) return false;
+  Profile p;if(!readProfileBody(f,p,version))return false;
   std::string end,extra;
   if (!(f >> end) || end!="END" || (f >> extra)) return false;
   result=std::move(p);
@@ -292,7 +332,7 @@ Profile Store::load() {
 }
 bool Store::writeSnapshot(const Profile &p) {
   std::ostringstream s;
-  s << "CWPROFILE 3 " << generation << '\n'
+  s << "CWPROFILE 4 " << generation << '\n'
     << std::quoted(p.lesson) << ' ' << p.step << ' ' << p.textSize << ' '
     << p.recovered << ' ' << p.evidence.size() << '\n';
   for (const auto &[id, e] : p.evidence)
@@ -303,13 +343,19 @@ bool Store::writeSnapshot(const Profile &p) {
     << p.resumeRevision << "\nACTIVITY " << p.studyDays.size();
   for (int day : p.studyDays)
     s << ' ' << day;
-  s << "\nEND\n";
+  s << "\nLAB "<<p.labMode<<' '<<p.achievements.size()<<'\n';
+  for(const auto& [id,a]:p.achievements)s<<std::quoted(id)<<' '<<a.assessment<<' '<<a.testRevision<<' '<<a.day<<' '<<std::quoted(a.sourceHash)<<'\n';
+  s<<"COMPLETIONS "<<p.completionDays.size()<<'\n';
+  for(const auto& [day,id]:p.completionDays)s<<day<<' '<<std::quoted(id)<<'\n';
+  s<<"END\n";
+  if(s.str().size()>1024*1024)return false;
   auto primary = root / ("generation-" + std::to_string(generation) + ".save");
   Profile previous;
   if (readSnapshot(primary, previous)) {
     std::ifstream in(primary, std::ios::binary);
     std::ostringstream bytes;
     bytes << in.rdbuf();
+    if(!preserveLegacy(primary,bytes.str()))return false;
     auto backup = primary;
     backup += ".bak";
     if (!atomicWrite(backup, bytes.str()))
@@ -358,6 +404,7 @@ bool Store::reset(Profile &p) {
   generation++;
   Profile fresh;
   fresh.textSize = p.textSize;
+  fresh.labMode = p.labMode;
   if (!writeSnapshot(fresh) ||
       !atomicWrite(root / "manifest",
                    "CWAYPOINT 1 " + std::to_string(generation) + "\n")) {
@@ -463,7 +510,7 @@ Result Controller::submit(int l, int q, const std::string &a) {
   e.attempts++;
   if (r.kind == Verdict::Correct) {
     e.solved = true;
-    profile.studyDays.insert(localStudyDay());
+    if(!profile.labMode)profile.studyDays.insert(localStudyDay());
     if (e.attempts == 1)
       e.independent = !e.helped && !profile.recovered && store.writable();
     profile.review.erase(question.id);
@@ -567,5 +614,26 @@ bool Controller::reset() {
   unsavedChanges = false;
   notice = store.status();
   return true;
+}
+bool Controller::enableLabMode(){
+ if(profile.labMode)return true;profile.labMode=true;return persist();
+}
+bool Controller::lessonCompleted(int l)const{
+ const auto& lesson=lessons.at(l);auto it=profile.achievements.find(lesson.id);
+ return it!=profile.achievements.end() && it->second.assessment==lesson.revision && it->second.testRevision==labFor(lesson.id).revision && completed(l)==2;
+}
+int Controller::completedToday(int day)const{
+ int count=0;for(const auto& item:profile.completionDays)if(item.first==day)++count;return count;
+}
+bool Controller::completeLesson(int l,const LabResult& r,unsigned long gen,int day){
+ if(gen!=store.activeGeneration() || !profile.labMode || !store.writable())return false;
+ if(r.testRevision!=labFor(lessons.at(l).id).revision)return false;
+ if(completed(l)!=2 || !r.allPassed() || !validHash(r.sourceHash))return false;
+ if(day<0 || day>100000 || profile.completionDays.size()>=5000)return false;
+ auto before=profile;const auto& lesson=lessons.at(l);
+ profile.achievements[lesson.id]={lesson.revision,r.testRevision,day,r.sourceHash};
+ profile.completionDays.insert({day,lesson.id});profile.studyDays.insert(day);
+ if(persist())return true;
+ profile=std::move(before);return false;
 }
 } // namespace cw

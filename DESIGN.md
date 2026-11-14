@@ -1,3 +1,5 @@
+> **14 November 2026 implementation update:** The approved reference design and real isolated WASI compile/run are now the default application. See [current runtime and UI contracts](docs/reference-runtime.md). Earlier non-execution and Study assistant descriptions below apply to the retained legacy diagnostic renderer; the production right pane is the C/C++ workbench. Discussion is explicitly offline.
+
 ---
 name: CWaypoint
 description: A dark desktop study workspace for C and C++.
