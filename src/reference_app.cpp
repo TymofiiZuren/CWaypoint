@@ -7,9 +7,11 @@
 #include "keyboard_input.hpp"
 #include "streak_icon.hpp"
 #include <raylib.h>
+#include <rlgl.h>
 #include <mach-o/dyld.h>
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <filesystem>
 #include <future>
 #include <iostream>
@@ -23,11 +25,18 @@ std::filesystem::path toolFolder(){return executableFolder().parent_path()/"Reso
 std::string initials(const std::string& name){if(name.empty())return "CW";std::string out(1,static_cast<char>(std::toupper(name.front())));auto p=name.find_last_of(' ');if(p!=name.npos && p+1<name.size())out+=static_cast<char>(std::toupper(name[p+1]));return out;}
 std::string escaped(std::string value){std::string out;for(char c:value){if(c=='\n')out+="\\n";else out+=c;}return out;}
 bool repeat(int key){return IsKeyPressed(key)||IsKeyPressedRepeat(key);}
+// Read the actual backing dimensions once; the installed TakeScreenshot path
+// applies Retina scaling a second time and exports a padded image.
+void captureScreenshot(const char* path){
+ int width=GetRenderWidth(),height=GetRenderHeight();Image image{rlReadScreenPixels(width,height),width,height,1,PIXELFORMAT_UNCOMPRESSED_R8G8B8A8};
+ if(!image.data)throw std::runtime_error("Cannot read the display framebuffer.");
+ bool saved=ExportImage(image,path);UnloadImage(image);if(!saved)throw std::runtime_error("Cannot save screenshot.");
+}
 enum class Page{Learning,Courses,Lesson,Settings,Progress,Review,Compare};
 struct ReferenceApp {
  const AppOptions& options;const std::vector<Lesson>& lessons;Store& store;Controller& app;StudyStore study;
  Rectangle clip{0,0,5000,5000};bool targetSeen=false;
- Font font{},bold{},mono{};Texture2D fire{};Page page=Page::Learning;
+ std::map<std::pair<int,int>,Font> fonts;Texture2D fire{};Page page=Page::Learning;
  float outputScroll=0,outputExtent=0,scroll=0,extent=0,materialScroll=0,materialExtent=0;int lesson=0,stage=0,question=0,tab=0;
  bool codeVisible=false,drawer=false,modulesOpen=true,showData=false,showHelp=false,resetCode=false,resetProgress=false,exitConfirm=false,closeApproved=false;
  int pendingPage=-1;bool leaving=false;
@@ -38,13 +47,26 @@ struct ReferenceApp {
  int dropdown=0,dropdownChoice=0;Rectangle dropdownAnchor{};std::string dropdownFocus;
  std::future<LabResult> future;std::atomic_bool cancel{false};LabResult result;bool busy=false;
  int resultLesson=-1;unsigned long runGeneration=0;double editedAt=0;bool dirty=false;
+ int captureDelay=0;std::string pendingImage;
  size_t testAction=0;int testIdle=0,geometryAttempts=0;std::string testValue;int frames=0;bool testOk=true;
  std::vector<std::string> testActions{"nav:courses","course:C","stage:1","type:answer","check-answer","next-question","type:answer","check-answer","set-solution","run-code","wait-run","mark-complete","edit-source","assert-stale","run-code","wait-run","mark-complete","tab:notes","type:note","bookmark","nav:settings","type:name","goal","select:2","theme","select:1","font","select:2","save-preferences","nav:courses","type:search","clear-search","nav:learning"};
  ReferenceApp(const AppOptions& o,const std::vector<Lesson>& l,Store& s,Controller& a):options(o),lessons(l),store(s),app(a),study(s),form(study.preferences){}
  ~ReferenceApp(){cancel.store(true);if(future.valid())future.wait();}
- float measure(const std::string& s,float size,bool code=false){return MeasureTextEx(code?mono:font,s.c_str(),size,.2f).x;}
- void text(const std::string& s,float x,float y,float size=17,Color c=fg,bool heavy=false){DrawTextEx(heavy?bold:font,s.c_str(),{x,y},size,.2f,c);}
- void surface(Rectangle r,Color fill=card,Color border=edge){DrawRectangleRounded(r,std::min(1.f,20.f/std::min(r.width,r.height)),12,fill);DrawRectangleRoundedLinesEx(r,std::min(1.f,20.f/std::min(r.width,r.height)),12,1,border);}
+ float pixelScale(){return std::max(1.f,GetRenderWidth()/static_cast<float>(GetScreenWidth()));}
+ Font fontAt(float size,bool code=false,bool heavy=false){
+  int family=code?2:heavy?1:0,pixels=std::max(12,static_cast<int>(std::round(size*pixelScale())));auto key=std::make_pair(family,pixels);
+  auto found=fonts.find(key);if(found!=fonts.end())return found->second;
+  const char* paths[]={"/System/Library/Fonts/Supplemental/Arial.ttf","/System/Library/Fonts/Supplemental/Arial Bold.ttf","/System/Library/Fonts/Supplemental/Andale Mono.ttf"};
+  auto font=LoadFontEx(paths[family],pixels,nullptr,0);SetTextureFilter(font.texture,TEXTURE_FILTER_BILINEAR);fonts[key]=font;return font;
+ }
+ float measure(const std::string& s,float size,bool code=false){return MeasureTextEx(fontAt(size,code),s.c_str(),size,.2f).x;}
+ void drawText(const std::string& s,Vector2 position,float size,Color color,bool code=false,bool heavy=false){
+  float scale=pixelScale();position.x=std::round(position.x*scale)/scale;position.y=std::round(position.y*scale)/scale;
+  DrawTextEx(fontAt(size,code,heavy),s.c_str(),position,size,.2f,color);
+ }
+ void text(const std::string& s,float x,float y,float size=17,Color c=fg,bool heavy=false){drawText(s,{x,y},size,c,false,heavy);}
+ float roundness(Rectangle r,float radius=10){return std::min(1.f,2*radius/std::min(r.width,r.height));}
+ void surface(Rectangle r,Color fill=card,Color border=edge){DrawRectangleRounded(r,roundness(r),12,fill);DrawRectangleRoundedLinesEx(r,roundness(r),12,1,border);}
  void line(float x,float y,float width){DrawRectangleRec({x,y,width,1},edge);}
  void clipping(Rectangle r){clip=r;BeginScissorMode(r.x,r.y,r.width,r.height);}
  bool inView(Rectangle r){return CheckCollisionRecs(r,clip);}
@@ -69,9 +91,10 @@ struct ReferenceApp {
   focus=id;keyFocus=key;consumed=true;acted=id;return true;
  }
  void buttonFace(const std::string& label,Rectangle r,bool main,bool enabled,bool quiet,bool hot,bool active){
-  if(!quiet)surface(r,main?primary:Color{31,33,38,255},main?primary:Color{93,104,122,255});
-  if(hot){DrawRectangleRounded(r,.25f,8,main?Color{80,123,228,255}:selected);SetMouseCursor(MOUSE_CURSOR_POINTING_HAND);}
-  if(active&&keyFocus)DrawRectangleRoundedLinesEx({r.x-3,r.y-3,r.width+6,r.height+6},.25f,8,2,accent);
+  Color fill=main?primary:Color{31,33,38,255};Color border=main?primary:Color{93,104,122,255};
+  if(hot){fill=main?Color{80,123,228,255}:selected;SetMouseCursor(MOUSE_CURSOR_POINTING_HAND);}
+  if(!quiet)surface(r,fill,border);else if(hot)surface(r,fill,fill);
+  if(active&&keyFocus){Rectangle ring{r.x-3,r.y-3,r.width+6,r.height+6};DrawRectangleRoundedLinesEx(ring,roundness(ring,13),12,2,accent);}
   float fs=16;while(fs>13&&measure(label,fs)>r.width-24)--fs;text(label,r.x+12,r.y+(r.height-fs)/2,fs,enabled?fg:muted);
  }
  bool button(const std::string& id,const std::string& label,Rectangle r,bool main=false,bool enabled=true,bool quiet=false){
@@ -79,13 +102,15 @@ struct ReferenceApp {
   bool hot=enabled&&hit(r,id);buttonFace(label,r,main,enabled,quiet,hot,focus==id);
   return activate(id,hot,enabled);
  }
+ std::vector<std::string> wrappedRows(const std::string& value,float width,float size){
+  std::istringstream input(value);std::string word,row;std::vector<std::string> rows;
+  while(input>>word){std::string next=row.empty()?word:row+" "+word;
+   if(!row.empty()&&measure(next,size)>width){rows.push_back(row);row=word;}else row=next;
+  }if(!row.empty())rows.push_back(row);return rows;
+ }
+ float paragraphHeight(const std::string& value,float width,float size){return wrappedRows(value,width,size).size()*size*1.55f;}
  float paragraph(const std::string& value,float x,float y,float width,float size=17,Color color=muted){
-  std::istringstream input(value);std::string word,row;const float h=size*1.55f;
-  while(input>>word){
-   std::string next=row.empty()?word:row+" "+word;
-   if(!row.empty() && measure(next,size)>width){text(row,x,y,size,color);y+=h;row=word;}else row=next;
-  }
-  if(!row.empty()){text(row,x,y,size,color);y+=h;}return y;
+  for(const auto& row:wrappedRows(value,width,size)){text(row,x,y,size,color);y+=size*1.55f;}return y;
  }
  void autosave(){
   if(!dirty || GetTime()-editedAt<.7)return;
@@ -297,33 +322,39 @@ struct ReferenceApp {
   if(page==Page::Settings&&preferencesChanged()){leaving=true;pendingPage=-1;return false;}
   if(dirty&&!study.save()){notice=study.notice;exitConfirm=true;return false;}return true;
  }
- void settingsForm(Rectangle r){
-  surface(r);float x=r.x+28,y=r.y+28,w=r.width-56;text("Profile & learning",x,y,23,fg,true);y+=48;
-  y=paragraph("Make this space feel like yours. Preferences are saved only on this device.",x,y,w,17)+28;
+ float settingsForm(Rectangle r){
+  const std::string intro="Make this space feel like yours. Preferences are saved only on this device.";
+  const std::string appearance="Applies only to the code editor. The rest of CWaypoint stays dark.";
+  const std::string explanation="One completed lesson keeps your streak alive. Your goal is a personal target, not a streak requirement.";
+  float w=r.width-56;r.height=766+paragraphHeight(intro,w,17)+paragraphHeight(appearance,w,16)+paragraphHeight(explanation,w,15);
+  surface(r);float x=r.x+28,y=r.y+28;text("Profile & learning",x,y,23,fg,true);y+=48;
+  y=paragraph(intro,x,y,w,17)+28;
   text("Display name",x,y);y+=30;textField("name",form.name,{x,y,w,46},80,"Your name (optional)");y+=78;
   text("Daily learning goal",x,y);y+=30;dropdownField(1,"goal",std::to_string(form.goal)+" lesson(s) - build a daily habit",{x,y,w,46});y+=78;line(x,y,w);y+=30;
   text("Code editor appearance",x,y,22,fg,true);y+=40;
-  y=paragraph("Applies only to the code editor. The rest of CWaypoint stays dark.",x,y,w,16)+24;
+  y=paragraph(appearance,x,y,w,16)+24;
   text("Theme",x,y);text("Font size",x+w/2+12,y);y+=30;
   dropdownField(2,"theme",form.lightEditor?"Light":"Dark",{x,y,(w-24)/2,46});
   dropdownField(3,"font",std::to_string(form.editorSize)+" px",{x+w/2+12,y,(w-24)/2,46});y+=70;
   surface({x,y,w,64},form.lightEditor?Color{239,241,245,255}:bg);
-  DrawTextEx(mono,"printf(\"Hello, CWaypoint!\\n\");",{x+16,y+22},form.editorSize,.2f,form.lightEditor?Color{36,65,126,255}:accent);y+=92;
+  drawText("printf(\"Hello, CWaypoint!\\n\");",{x+16,y+22},form.editorSize,form.lightEditor?Color{36,65,126,255}:accent,true);y+=92;
   if(button("nudge",form.nudge?"[x]  Show an in-app daily nudge":"[ ]  Show an in-app daily nudge",{x,y,w,44},false,true,true))form.nudge=!form.nudge;y+=64;
-  y=paragraph("One completed lesson keeps your streak alive. Your goal is a personal target, not a streak requirement.",x,y,w,15)+24;
+  y=paragraph(explanation,x,y,w,15)+24;
+  if(options.referenceTest && y+44>r.y+r.height-28)throw std::runtime_error("Settings actions overflow the profile panel");
   if(button("save-preferences","Save preferences",{x,y,210,44},true))savePreferences();
   if(button("cancel-preferences","Cancel changes",{x+226,y,160,44})){form=study.preferences;fields["name"].set(form.name);notice="Preference changes discarded.";}
+  return r.height;
  }
  void settings(){
   float w=std::min(1120.f,GetScreenWidth()-96.f),x=(GetScreenWidth()-w)/2,y=120-scroll;
   heading("YOUR WORKSPACE, YOUR WAY","Settings","Small adjustments for a better learning habit.",x,y);y+=140;
   bool narrow=GetScreenWidth()<1100;float left=narrow?w:(w-24)*.64f;
-  settingsForm({x,y,left,774});float sideY=narrow?y+798:y;
+  float formHeight=settingsForm({x,y,left,0});float sideY=narrow?y+formHeight+24:y;
   streakCard({narrow?x:x+left+24,sideY,narrow?w:w-left-24,296});
   float infoX=narrow?x:x+left+24,infoW=narrow?w:w-left-24;
   surface({infoX,sideY+320,infoW,230});text("Your streak stays with you",infoX+24,sideY+346,21,fg,true);
   paragraph("Complete a lesson each day to keep your flame going. Repeated completions on the same day do not add extra streak days. Nothing syncs across devices.",infoX+24,sideY+390,infoW-48,17);
-  y=narrow?sideY+580:y+810;
+  y=narrow?sideY+580:y+std::max(formHeight,550.f)+28;
   if(button("learning-data",showData?"Hide learning data and help":"Learning data, reading size & help",{x,y,w,46},false,true,true))showData=!showData;
   y+=66;if(showData)y=dataSettings(x,y,w);extent=y+scroll+40;
  }
@@ -377,7 +408,7 @@ struct ReferenceApp {
   auto& q=lessons[lesson].questions[question];text(stage==2?"Fresh check":"Practice "+std::to_string(question+1)+" of 2",x,y,15,accent);y+=32;
   y=paragraph(q.prompt,x,y,width,21,fg)+20;
   const auto& source=q.code.empty()?lessons[lesson].code:q.code;std::istringstream in(source);std::string row;
-  while(std::getline(in,row)){DrawTextEx(mono,row.c_str(),{x,y},14,.2f,fg);y+=24;}y+=20;
+  while(std::getline(in,row)){drawText(row,{x,y},14,fg,true);y+=24;}y+=20;
   predictionAnswer(q,x,y,width);
   if(button("check-answer","Check answer",{x,y,160,44},true))checkAnswer();
   if(!feedback.empty() && button("retry-answer","Try again",{x+174,y,120,44})){app.retry();feedback.clear();}y+=64;
@@ -420,7 +451,7 @@ struct ReferenceApp {
     text(std::to_string(1+std::count(editor.value().begin(),editor.value().begin()+offset,'\n')),r.x+10,y,size,muted);
     size_t a=std::max(offset,editor.selectionStart()),b=std::min(offset+row.size(),editor.selectionEnd());
     if(b>a)DrawRectangleRec({r.x+48+(a-offset)*cell-editorX[id],y,(b-a)*cell,size*1.6f},selected);
-    DrawTextEx(mono,row.c_str(),{r.x+48-editorX[id],y},size,.2f,row.rfind("//",0)==0?muted:ink);
+    drawText(row,{r.x+48-editorX[id],y},size,row.rfind("//",0)==0?muted:ink,true);
     if(focus==id && editor.cursor()>=offset && editor.cursor()<=offset+row.size())DrawRectangleRec({r.x+48+(editor.cursor()-offset)*cell-editorX[id],y,2,size+2},accent);
    }offset+=row.size()+1;y+=size*1.6f;
   }
@@ -524,7 +555,7 @@ struct ReferenceApp {
  void compareContent(float x,float& y,float w){
   for(const auto& c:comparisons()){
    text(c.title,x,y,24,fg,true);y+=44;y=paragraph(c.explanation,x,y,w,17)+24;
-   for(const auto& pair:{std::make_pair("C",c.c),std::make_pair("C++",c.cpp)}){text(pair.first,x,y,16,accent);y+=30;std::istringstream input(pair.second);std::string row;while(std::getline(input,row)){DrawTextEx(mono,row.c_str(),{x,y},15,.2f,fg);y+=26;}y+=24;}
+   for(const auto& pair:{std::make_pair("C",c.c),std::make_pair("C++",c.cpp)}){text(pair.first,x,y,16,accent);y+=30;std::istringstream input(pair.second);std::string row;while(std::getline(input,row)){drawText(row,{x,y},15,fg,true);y+=26;}y+=24;}
   }
  }
  void reviewContent(float x,float& y,float w){
@@ -594,13 +625,15 @@ struct ReferenceApp {
   const std::set<std::string> codeActions{"set-solution","edit-source","assert-stale","run-code","mark-complete"};
   if(codeActions.count(action)&&referenceLayout(GetScreenWidth(),GetScreenHeight()).compact&&!codeVisible)action="code-view";
   if(action=="tab:notes"&&codeVisible)action="material-view";
-  if(++testIdle>180){std::cerr<<"Reference failure: step="<<testAction<<" width="<<GetScreenWidth()<<" codeVisible="<<codeVisible<<" stage="<<stage<<" practice="<<app.completed(lesson)<<" compiled="<<result.compiled<<" passed="<<result.passed<<" current="<<currentResult()<<" diagnostics="<<result.diagnostics<<'\n';TakeScreenshot((std::filesystem::path(options.profile)/"failed-reference.png").c_str());throw std::runtime_error("Reference journey could not activate "+action);}
+  if(++testIdle>180){std::cerr<<"Reference failure: step="<<testAction<<" width="<<GetScreenWidth()<<" codeVisible="<<codeVisible<<" stage="<<stage<<" practice="<<app.completed(lesson)<<" compiled="<<result.compiled<<" passed="<<result.passed<<" current="<<currentResult()<<" diagnostics="<<result.diagnostics<<'\n';captureScreenshot((std::filesystem::path(options.profile)/"failed-reference.png").c_str());throw std::runtime_error("Reference journey could not activate "+action);}
  }
  void finishTestFrame(){
   if(action.empty()||acted!=action)return;
   if(action=="code-view"||action=="material-view")return;
+  if(action=="save-preferences"&&!options.capture.empty()){pendingImage="settings-footer.png";captureDelay=2;}
   ++testAction;testIdle=0;
  }
+ void captureFrame(){if(pendingImage.empty()||--captureDelay>0)return;captureScreenshot((std::filesystem::path(options.capture)/pendingImage).c_str());pendingImage.clear();}
  bool verifyTest(){
   if(!options.referenceTest||testAction<testActions.size())return false;
   auto& e=study.entries[lessons[0].id];
@@ -609,27 +642,25 @@ struct ReferenceApp {
   std::cout<<"Reference screen journey: PASS\n";return true;
  }
  void assets(){
-  font=LoadFontEx("/System/Library/Fonts/Supplemental/Arial.ttf",32,nullptr,0);
-  bold=LoadFontEx("/System/Library/Fonts/Supplemental/Arial Bold.ttf",40,nullptr,0);
-  mono=LoadFontEx("/System/Library/Fonts/Supplemental/Andale Mono.ttf",28,nullptr,0);
   auto image=LoadImageFromMemory(".png",streakFirePng,sizeof(streakFirePng));fire=LoadTextureFromImage(image);UnloadImage(image);
-  SetTextureFilter(font.texture,TEXTURE_FILTER_BILINEAR);SetTextureFilter(bold.texture,TEXTURE_FILTER_BILINEAR);SetTextureFilter(mono.texture,TEXTURE_FILTER_BILINEAR);
+
  }
- void unload(){if(busy){cancel.store(true);future.wait();}study.save();UnloadTexture(fire);UnloadFont(font);UnloadFont(bold);UnloadFont(mono);}
+ void unload(){if(busy){cancel.store(true);future.wait();}study.save();UnloadTexture(fire);for(auto& entry:fonts)UnloadFont(entry.second);}
 };
 } // namespace
 int checkPackagedRunner(){auto exercise=labFor("c-variables");auto result=runLab(exercise,exercise.solution,executableFolder()/"CWaypointLabHelper",toolFolder());std::cout<<"Packaged runner: "<<(result.allPassed()?"PASS":"FAIL")<<'\n';return result.allPassed()?0:1;}
 int runReferenceApp(const AppOptions& options,const std::vector<Lesson>& lessons,Store& store,Controller& controller){
- SetConfigFlags(FLAG_WINDOW_RESIZABLE|FLAG_MSAA_4X_HINT);InitWindow(options.compact?1000:1600,options.compact?740:1000,"CWaypoint");SetWindowMinSize(960,640);SetExitKey(KEY_NULL);SetTargetFPS(60);
- ReferenceApp ui(options,lessons,store,controller);ui.assets();controller.enableLabMode();
+ SetConfigFlags(FLAG_WINDOW_RESIZABLE|FLAG_WINDOW_HIGHDPI|FLAG_MSAA_4X_HINT);InitWindow(options.compact?1000:1600,options.compact?740:1000,"CWaypoint");SetWindowMinSize(960,640);SetExitKey(KEY_NULL);SetTargetFPS(60);
+ ReferenceApp ui(options,lessons,store,controller);ui.assets();
+ if(options.referenceTest||!options.capture.empty())std::cout<<"Display: logical="<<GetScreenWidth()<<"x"<<GetScreenHeight()<<" framebuffer="<<GetRenderWidth()<<"x"<<GetRenderHeight()<<" scale="<<ui.pixelScale()<<"\n";controller.enableLabMode();
  if(options.initial=="lesson")ui.resume();
  const std::map<std::string,Page> screens{{"settings",Page::Settings},{"progress",Page::Progress},{"review",Page::Review},{"compare",Page::Compare}};
  auto initial=screens.find(options.initial);if(initial!=screens.end())ui.navigate(initial->second);
  while(!ui.closeApproved){
   if(WindowShouldClose()&&ui.requestClose())break;
-  ui.pollRun();ui.autosave();ui.driveTest();BeginDrawing();ClearBackground(bg);ui.draw();EndDrawing();ui.finishTestFrame();++ui.frames;
-  if(ui.verifyTest()){if(!options.capture.empty())TakeScreenshot((std::filesystem::path(options.capture)/"reference-journey.png").c_str());break;}
-  if(!options.referenceTest&&!options.capture.empty()&&ui.frames==15){TakeScreenshot((std::filesystem::path(options.capture)/"reference.png").c_str());break;}
+  ui.pollRun();ui.autosave();ui.driveTest();BeginDrawing();ClearBackground(bg);ui.draw();EndDrawing();ui.finishTestFrame();ui.captureFrame();++ui.frames;
+  if(ui.verifyTest()){if(!options.capture.empty())captureScreenshot((std::filesystem::path(options.capture)/"reference-journey.png").c_str());break;}
+  if(!options.referenceTest&&!options.capture.empty()&&ui.frames==15){captureScreenshot((std::filesystem::path(options.capture)/"reference.png").c_str());break;}
  }
  ui.unload();CloseWindow();return 0;
 }
