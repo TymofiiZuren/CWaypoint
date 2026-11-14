@@ -504,6 +504,7 @@ Result Controller::submit(int l, int q, const std::string &a) {
   if (!issue(l, q))
     return {Verdict::Invalid, notice};
   auto &e = profile.evidence[question.id];
+  const bool wasComplete=lessonCompleted(l);
   if (e.attempts >= 1000000)
     return {Verdict::Invalid, "Attempt limit reached."};
   e.attempts++;
@@ -513,6 +514,7 @@ Result Controller::submit(int l, int q, const std::string &a) {
     if (e.attempts == 1)
       e.independent = !e.helped && !profile.recovered && store.writable();
     profile.review.erase(question.id);
+    if(!wasComplete)recordCompletedDay(l,localStudyDay());
   } else
     profile.review.insert(question.id);
   submitted = question.id;
@@ -617,22 +619,43 @@ bool Controller::reset() {
 bool Controller::enableLabMode(){
  if(profile.labMode)return true;profile.labMode=true;return persist();
 }
-bool Controller::lessonCompleted(int l)const{
- const auto& lesson=lessons.at(l);auto it=profile.achievements.find(lesson.id);
- return it!=profile.achievements.end() && it->second.assessment==lesson.revision && it->second.testRevision==labFor(lesson.id).revision && completed(l)==2;
+Result Controller::submitEdited(int l,int q,const std::string& answer){
+ if(pendingSubmission)return {Verdict::Invalid,"Retry save before checking another answer."};
+ const auto& id=lessons.at(l).questions.at(q).id;
+ if(submitted==id&&editedQuestion==id&&editedAnswer==answer)return editedResult;
+ auto previous=submitted;if(submitted==id)submitted.clear();
+ auto result=submit(l,q,answer);
+ if(result.kind==Verdict::Invalid&&!pendingSubmission)submitted=previous;
+ if(result.kind!=Verdict::Invalid||pendingSubmission){editedQuestion=id;editedAnswer=answer;editedResult=pendingSubmission?evaluate(lessons.at(l).questions.at(q),answer):result;}
+ return result;
 }
+bool Controller::labPassed(int l)const{
+ const auto& lesson=lessons.at(l);auto it=profile.achievements.find(lesson.id);
+ return it!=profile.achievements.end()&&it->second.assessment==lesson.revision&&it->second.testRevision==labFor(lesson.id).revision;
+}
+int Controller::learningUnits(int l)const{return completed(l)+static_cast<int>(labPassed(l));}
+int Controller::courseProgress(const std::string& track)const{
+ int total=0,units=0;for(int i=0;i<static_cast<int>(lessons.size());++i)if(lessons[i].track==track){total+=3;units+=learningUnits(i);}return total?units*100/total:0;
+}
+bool Controller::recordLabResult(int l,const LabResult& r,unsigned long gen,int day){
+ if(gen!=store.activeGeneration()||!profile.labMode||!store.writable())return false;
+ if(r.testRevision!=labFor(lessons.at(l).id).revision||!r.allPassed()||!validHash(r.sourceHash))return false;
+ if(day<0||day>100000||profile.completionDays.size()>=5000)return false;
+ auto before=profile;const auto& lesson=lessons.at(l);
+ profile.achievements[lesson.id]={lesson.revision,r.testRevision,day,r.sourceHash};
+ recordCompletedDay(l,day);
+ if(persist())return true;profile=std::move(before);return false;
+}
+void Controller::recordCompletedDay(int l,int day){
+ if(!profile.labMode||!store.writable()||!lessonCompleted(l)||profile.completionDays.size()>=5000)return;
+ profile.completionDays.insert({day,lessons.at(l).id});profile.studyDays.insert(day);
+}
+bool Controller::lessonCompleted(int l)const{return labPassed(l)&&completed(l)==2;}
 int Controller::completedToday(int day)const{
  int count=0;for(const auto& item:profile.completionDays)if(item.first==day)++count;return count;
 }
 bool Controller::completeLesson(int l,const LabResult& r,unsigned long gen,int day){
- if(gen!=store.activeGeneration() || !profile.labMode || !store.writable())return false;
- if(r.testRevision!=labFor(lessons.at(l).id).revision)return false;
- if(completed(l)!=2 || !r.allPassed() || !validHash(r.sourceHash))return false;
- if(day<0 || day>100000 || profile.completionDays.size()>=5000)return false;
- auto before=profile;const auto& lesson=lessons.at(l);
- profile.achievements[lesson.id]={lesson.revision,r.testRevision,day,r.sourceHash};
- profile.completionDays.insert({day,lesson.id});profile.studyDays.insert(day);
- if(persist())return true;
- profile=std::move(before);return false;
+ if(completed(l)!=2)return false;return recordLabResult(l,r,gen,day);
 }
+
 } // namespace cw

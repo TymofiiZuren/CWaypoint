@@ -89,6 +89,9 @@ class Controller {
   Store &store;
   std::string submitted;
   bool pendingSubmission = false;
+  std::string editedQuestion,editedAnswer;
+  Result editedResult{Verdict::Invalid,""};
+  void recordCompletedDay(int lesson,int day);
   bool persist();
 
 public:
@@ -99,6 +102,7 @@ public:
   bool issue(int lesson, int question);
   bool help(int lesson, int question);
   Result submit(int lesson, int question, const std::string &);
+  Result submitEdited(int lesson,int question,const std::string&);
   void retry();
   std::string status(int lesson, int question) const;
   std::vector<ReviewItem> reviewItems(const std::string &track = "") const;
@@ -110,6 +114,10 @@ public:
   bool reset();
   bool enableLabMode();
   bool lessonCompleted(int lesson) const;
+  bool labPassed(int lesson) const;
+  int learningUnits(int lesson) const;
+  int courseProgress(const std::string& track) const;
+  bool recordLabResult(int lesson,const LabResult&,unsigned long generation,int day=localStudyDay());
   int completedToday(int day=localStudyDay()) const;
   bool completeLesson(int lesson,const LabResult&,unsigned long generation,int day=localStudyDay());
   bool save() { return persist(); }

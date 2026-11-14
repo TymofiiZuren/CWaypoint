@@ -11,7 +11,7 @@ The approved reference design is the default native renderer in `src/reference_a
 - `process`: direct argument-vector spawn, explicit environment, bounded pipe I/O, timeouts, owned process-group cancellation and cleanup.
 - `lab_helper.mm`: App Sandbox workspace, compiler invocation and Wasmtime execution. No shell interpretation of learner text.
 
-A completion receipt requires both practice answers, a passing run, current source/test identity, writable storage and the current reset generation. The UI writes an immutable source snapshot before asking the Controller to persist a receipt. Legacy activity days are preserved. In the new lab mode, individual correct answers do not add new streak days.
+A lab receipt requires a passing compiler run, current source/test identity, writable storage and the current reset generation. The UI writes an immutable source snapshot and automatically asks the Controller to persist the result. A lab can be saved before the two knowledge checks are solved. Each solved knowledge check and the passed lab contributes one of three progress units. Completing all three records lesson completion and the distinct lesson/day activity automatically, regardless of which task is completed last. Changed knowledge-check answers can be submitted directly; repeated unchanged submissions are idempotent. Failed saves retain the pending-submission guard. Legacy activity days are preserved. In the new lab mode, individual correct answers do not add new streak days.
 
 ## Packaging
 
@@ -30,3 +30,6 @@ Discussion is explicitly offline. The catalogue reflects four available modules,
 CTest covers legacy assessment/storage, authored content, options/layout, multiline editing, bounded processes, all four actual C/C++ WASI solutions/starters, invalid programs, loop/output/memory bounds, guest filesystem/environment denial, compiler unrelated-file denial, cancellation, completion receipts, stale revisions, migration and personal data.
 
 The production `--reference-test` journey covers catalogue → practice → real compile/run → complete → notes/bookmark → settings/dropdowns → search → My learning. Both wide and compact journeys assert persisted data by reloading storage. Screenshot review covers catalogue, settings, wide lesson and compact material screens. Pointer-location and keyboard/OS recording behavior still benefit from manual interaction on the target Mac; synthetic journeys are not a native accessibility or macOS screen-recorder certification.
+
+
+Practice places the compiler exercise instructions, input/output examples and Run & check action next to the editable workbench. The two short knowledge checks are explicitly labelled separately from the coding exercise. The catalogue, module rail and progress screen consume the same partial-progress calculation; a separate Mark complete click is no longer required.

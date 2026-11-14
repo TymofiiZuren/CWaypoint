@@ -49,7 +49,7 @@ struct ReferenceApp {
  int resultLesson=-1;unsigned long runGeneration=0;double editedAt=0;bool dirty=false;
  int captureDelay=0;std::string pendingImage;
  size_t testAction=0;int testIdle=0,geometryAttempts=0;std::string testValue;int frames=0;bool testOk=true;
- std::vector<std::string> testActions{"nav:courses","course:C","stage:1","type:answer","check-answer","next-question","type:answer","check-answer","set-solution","run-code","wait-run","mark-complete","edit-source","assert-stale","run-code","wait-run","mark-complete","tab:notes","type:note","bookmark","nav:settings","type:name","goal","select:2","theme","select:1","font","select:2","save-preferences","nav:courses","type:search","clear-search","nav:learning"};
+ std::vector<std::string> testActions{"nav:courses","course:C","stage:1","run-exercise","wait-run","assert-run-failed","type:answer","check-answer","type:answer","check-answer","check-answer","next-question","type:answer","check-answer","set-solution","run-exercise","wait-run","assert-auto-complete","edit-source","assert-stale","run-code","wait-run","assert-auto-complete","tab:notes","type:note","bookmark","nav:settings","type:name","goal","select:2","theme","select:1","font","select:2","save-preferences","nav:courses","type:search","clear-search","nav:learning"};
  ReferenceApp(const AppOptions& o,const std::vector<Lesson>& l,Store& s,Controller& a):options(o),lessons(l),store(s),app(a),study(s),form(study.preferences){}
  ~ReferenceApp(){cancel.store(true);if(future.valid())future.wait();}
  float pixelScale(){return std::max(1.f,GetRenderWidth()/static_cast<float>(GetScreenWidth()));}
@@ -190,7 +190,7 @@ struct ReferenceApp {
   text(track+" foundations",r.x+24,r.y+96,22,fg,true);
   paragraph(track=="C"?"Build a foundation with values, pointers and control flow.":"Explore strings, input and the building blocks of C++.",r.x+24,r.y+136,r.width-48,17);
   int count=0,done=0;for(int i=0;i<static_cast<int>(lessons.size());++i)if(lessons[i].track==track){++count;done+=app.lessonCompleted(i);}
-  text("Beginner  /  "+std::to_string(count)+(count==1?" module  /  ":" modules  /  ")+std::to_string(done)+" complete",r.x+24,r.y+218,14,muted);
+  text("Beginner  /  "+std::to_string(count)+(count==1?" module  /  ":" modules  /  ")+std::to_string(done)+" complete  /  "+std::to_string(app.courseProgress(track))+"%",r.x+24,r.y+218,14,muted);
   if(button("course:"+track,"Open course",{r.x+24,r.y+r.height-62,170,42},true))openLesson(nextInTrack(track));
  }
  float savedLessons(float x,float y,float w){
@@ -376,9 +376,9 @@ struct ReferenceApp {
  }
  void moduleRail(Rectangle r){
   clipping(r);DrawRectangleRec(r,card);text(lessons[lesson].track+" foundations",r.x+20,112,22,fg,true);
-  int total=0,done=0;for(int i=0;i<static_cast<int>(lessons.size());++i)if(lessons[i].track==lessons[lesson].track){++total;done+=app.lessonCompleted(i);}
-  text("Your progress",r.x+20,158,15,muted);text(std::to_string(total?done*100/total:0)+"%",r.x+r.width-55,158,15);
-  DrawRectangleRec({r.x+20,188,r.width-40,4},edge);if(done)DrawRectangleRec({r.x+20,188,(r.width-40)*done/total,4},accent);
+  int progress=app.courseProgress(lessons[lesson].track);
+  text("Your progress",r.x+20,158,15,muted);text(std::to_string(progress)+"%",r.x+r.width-55,158,15);
+  DrawRectangleRec({r.x+20,188,r.width-40,4},edge);if(progress)DrawRectangleRec({r.x+20,188,(r.width-40)*progress/100,4},accent);
   if(button("collapse-modules","COURSE CONTENT",{r.x+8,210,r.width-16,38},false,true,true))modulesOpen=!modulesOpen;
   float y=264;if(modulesOpen)for(int i=0;i<static_cast<int>(lessons.size());++i)if(lessons[i].track==lessons[lesson].track){moduleRow(i,{r.x+12,y,r.width-24,72});y+=86;}
   if(button("all-courses","<  All courses",{r.x+12,r.y+r.height-64,r.width-24,44},false,true,true))navigate(Page::Courses);
@@ -404,25 +404,39 @@ struct ReferenceApp {
   if(q.type==QuestionType::Choice){for(const auto& choice:q.choices){if(button("answer-choice:"+choice,choice,{x,y,width,44},answer==choice))answer=choice;y+=54;}}
   else{textField("answer",answer,{x,y,width,46});y+=64;}
  }
+ void retryProgressSave(float x,float& y,float width){
+  if(!app.unsavedChanges||!store.writable())return;
+  if(button("retry-progress-save","Retry saving progress",{x,y,width,42},true)){if(app.save())checkAnswer();else feedback=app.notice;}y+=56;
+ }
+ bool answerEnter(){return !options.referenceTest&&focus=="answer"&&IsKeyPressed(KEY_ENTER)&&!dropdown;}
  void prediction(float x,float& y,float width){
   if(stage==2 && !app.issue(lesson,2)){y=paragraph("This fresh check needs writable saved progress. Return to practice or open save details.",x,y,width,17,errorColor);return;}
-  auto& q=lessons[lesson].questions[question];text(stage==2?"Fresh check":"Practice "+std::to_string(question+1)+" of 2",x,y,15,accent);y+=32;
+  auto& q=lessons[lesson].questions[question];text(stage==2?"Fresh check":"Knowledge check "+std::to_string(question+1)+" of 2",x,y,15,accent);y+=32;
   y=paragraph(q.prompt,x,y,width,21,fg)+20;
   const auto& source=q.code.empty()?lessons[lesson].code:q.code;std::istringstream in(source);std::string row;
   while(std::getline(in,row)){drawText(row,{x,y},14,fg,true);y+=24;}y+=20;
   predictionAnswer(q,x,y,width);
   if(button("check-answer","Check answer",{x,y,160,44},true))checkAnswer();
-  if(!feedback.empty() && button("retry-answer","Try again",{x+174,y,120,44})){app.retry();feedback.clear();}y+=64;
+  if(answerEnter())checkAnswer();y+=64;
   if(!feedback.empty())y=paragraph(feedback,x,y,width,17,verdict==Verdict::Correct?success:errorColor)+16;
-  if(stage==1 && question==0 && button("next-question","Next practice question",{x,y,width,44})){question=1;app.retry();answer.clear();fields["answer"].set("");feedback.clear();app.resume(lesson,stage,question);}y+=60;
+  retryProgressSave(x,y,width);
+  if(stage==1 && question==0 && button("next-question","Next knowledge check",{x,y,width,44})){question=1;app.retry();answer.clear();fields["answer"].set("");feedback.clear();app.resume(lesson,stage,question);}y+=60;
  }
- void checkAnswer(){auto value=app.submit(lesson,question,answer);feedback=value.message;verdict=value.kind;}
+ void checkAnswer(){auto value=app.submitEdited(lesson,question,answer);feedback=value.message;verdict=value.kind;if(value.kind==Verdict::Correct&&app.lessonCompleted(lesson)&&store.writable()&&!app.unsavedChanges)notice="Lesson complete. Progress and streak saved automatically.";}
  void helpHints(float x,float& y,float width){
   if(button("hints",showHelp?"Hide hints":"Need a hint?",{x,y,width,42},false,true,true))showHelp=!showHelp;y+=52;
   if(!showHelp)return;
   if(stage!=1 && stage!=2){y=paragraph(lessons[lesson].objective,x,y,width,16);return;}
   for(int i=0;i<3;++i){if(button("hint:"+std::to_string(i),std::to_string(i+1)+". "+(i==0?"Concept":i==1?"Guidance":"Explanation"),{x,y,width,42})){if(app.help(lesson,question))notice=lessons[lesson].questions[question].hints[i];}y+=50;}
   y=paragraph(notice,x,y,width,16);
+ }
+ void codingExercise(float x,float& y,float width){
+  auto exercise=labFor(lessons[lesson].id);text("Coding exercise",x,y,23,fg,true);y+=40;
+  y=paragraph(exercise.instructions,x,y,width,18,fg)+16;
+  for(const auto& test:exercise.cases)y=paragraph("Input: "+escaped(test.input)+"   Expected: "+escaped(test.expected),x,y,width,15,muted)+8;
+  if(button("run-exercise",busy?"Running...":"Run & check your code",{x,y,width,44},true,!busy)){codeVisible=true;startRun();}y+=62;
+  y=paragraph(app.labPassed(lesson)?"Coding exercise passed and saved.":"Edit the code in the workbench, then run it against both examples. Passing results save automatically.",x,y,width,16,app.labPassed(lesson)?success:muted)+20;
+  y=paragraph("Knowledge checks are recorded separately. Complete both checks and the coding exercise to finish this lesson.",x,y,width,16)+24;
  }
  void material(Rectangle r){
   materialTabs(r.x,r.width);clipping({r.x,140,r.width,r.y+r.height-140});float x=r.x+28,width=r.width-56,y=160-materialScroll;
@@ -431,8 +445,9 @@ struct ReferenceApp {
   for(int i=0;i<4;++i)if(button("stage:"+std::to_string(i),std::vector<std::string>{"Read","Practice","Fresh","Summary"}[i],{x+i*(width/4),y,width/4-8,36},false,true,true,stage==i))setStage(i);
   y+=66;text(lessons[lesson].title,x,y,25,fg,true);y+=48;
   if(stage==0){y=paragraph(lessons[lesson].body,x,y,width,app.profile.textSize,fg)+24;text("Your turn",x,y,23,fg,true);y=paragraph(labFor(lessons[lesson].id).instructions,x,y+42,width,18,fg)+24;if(button("start-practice","Start practice",{x,y,200,44},true))setStage(1);y+=64;}
-  else if(stage==1 || stage==2)prediction(x,y,width);
-  else{y=paragraph(std::to_string(app.completed(lesson))+" of 2 practice questions solved. The lab and fresh-check evidence are recorded separately.",x,y,width,18,fg)+18;for(int q=0;q<3;++q)y=paragraph((q==2?"Fresh check: ":"Practice "+std::to_string(q+1)+": ")+app.status(lesson,q),x,y,width,16)+16;}
+  else if(stage==1){codingExercise(x,y,width);prediction(x,y,width);}
+  else if(stage==2)prediction(x,y,width);
+  else{y=paragraph(std::to_string(app.completed(lesson))+" of 2 knowledge checks solved. Coding exercise: "+(app.labPassed(lesson)?"passed":"not passed")+". Progress saves automatically; fresh-check evidence remains separate.",x,y,width,18,fg)+18;for(int q=0;q<3;++q)y=paragraph((q==2?"Fresh check: ":"Practice "+std::to_string(q+1)+": ")+app.status(lesson,q),x,y,width,16)+16;}
   helpHints(x,y,width);materialExtent=std::max(0.f,y+materialScroll-(r.y+r.height-30));
  }
  void editorPointer(CodeEditor& editor,Rectangle r,float size,const std::string& id){
@@ -502,20 +517,26 @@ struct ReferenceApp {
   if(!busy || future.wait_for(std::chrono::milliseconds(0))!=std::future_status::ready)return;
   try{result=future.get();}catch(const std::exception& e){result={};result.diagnostics=e.what();}
   busy=false;notice=result.cancelled?"Run cancelled.":"Run finished. Review Output and Tests.";
+  if(currentResult()&&result.allPassed())complete();
  }
  void complete(){
   if(!currentResult()||!result.allPassed()){notice="Run this version and pass every test first.";return;}
   if(!study.saveSnapshot(result.sourceHash,code().value())){notice=study.notice;return;}
-  if(app.completeLesson(lesson,result,runGeneration))notice="Lesson complete. Your progress and streak are saved.";
-  else notice="Solve both practice questions and pass this lab before completing the lesson.";
+  if(app.recordLabResult(lesson,result,runGeneration))notice=app.lessonCompleted(lesson)?"Lesson complete. Progress and streak saved automatically.":"Coding exercise passed and saved. Finish both knowledge checks to complete the lesson.";
+  else notice="Could not save the coding result. "+app.notice;
+ }
+ void testLabAction(){
+  if(action=="assert-run-failed"){if(!result.compiled||result.allPassed()||app.learningUnits(lesson))throw std::runtime_error("Starter coding exercise must fail without progress");acted=action;}
+  if(action=="edit-source"){code().insert("\n// Another revision\n");saveEditor("source",code());acted=action;}
+  if(action=="assert-auto-complete"){if(!app.lessonCompleted(lesson)||!app.completedToday())throw std::runtime_error("Passing lab did not save completion automatically");acted=action;}
+  if(action=="assert-stale"){if(currentResult())throw std::runtime_error("Edited source reused a stale result");acted=action;}
+  if(action=="set-solution"){code().set(labFor(lessons[lesson].id).solution);saveEditor("source",code());acted=action;}
  }
  void runControls(Rectangle r){
   if(button("reset-code",resetCode?"Confirm reset":"Reset",{r.x+20,r.y,resetCode?144.f:90.f,42})){if(resetCode){code().set(labFor(lessons[lesson].id).starter);saveEditor("source",code());resetCode=false;}else resetCode=true;}
   if(resetCode && button("cancel-code-reset","Keep code",{r.x+174,r.y,110,42}))resetCode=false;
-  if(button("run-code",busy?"Cancel run":"Run code",{r.x+r.width-148,r.y,128,42},true)){if(busy)cancel.store(true);else startRun();}
-  if(action=="edit-source"){code().insert("\n// Another revision\n");saveEditor("source",code());acted=action;}
-  if(action=="assert-stale"){if(currentResult())throw std::runtime_error("Edited source reused a stale result");acted=action;}
-  if(action=="set-solution"){code().set(labFor(lessons[lesson].id).solution);saveEditor("source",code());acted=action;}
+  if(button("run-code",busy?"Cancel run":"Run & check",{r.x+r.width-148,r.y,128,42},true)){if(busy)cancel.store(true);else startRun();}
+  testLabAction();
  }
  void output(Rectangle r){
   if(hit(r,"output")&&GetMouseWheelMove()){outputScroll=std::clamp(outputScroll-GetMouseWheelMove()*36,0.f,outputExtent);wheelUsed=true;}
@@ -541,9 +562,15 @@ struct ReferenceApp {
   float y=158+editorHeight;runControls({r.x,y,r.width,44});y+=56;
   clipping({r.x,y,r.width,std::max(0.f,r.y+r.height-84-y)});output({r.x,y,r.width,r.y+r.height-y-84});clipping(r);
   float bottom=r.y+r.height-74;DrawRectangleRec({r.x,bottom,r.width,74},currentResult()&&result.allPassed()?Color{28,39,32,255}:card);
-  bool ready=currentResult()&&result.allPassed()&&app.completed(lesson)==2&&store.writable();
-  if(button("mark-complete",app.lessonCompleted(lesson)?"Lesson completed":"Mark lesson complete",{r.x+r.width-232,bottom+16,212,42},true,ready))complete();
-  text(ready?"Tests passed":"Solve practice + pass lab",r.x+20,bottom+28,14,ready?success:muted);
+  std::string label=app.lessonCompleted(lesson)?"View summary":app.labPassed(lesson)?"Finish knowledge checks":currentResult()&&result.allPassed()?"Retry saving result":"Run & check";
+  if(button("mark-complete",label,{r.x+r.width-232,bottom+16,212,42},true,!busy))lessonAction();
+  text(std::to_string(app.learningUnits(lesson))+" of 3 "+(app.unsavedChanges||!store.writable()?"tasks in session":"tasks saved"),r.x+20,bottom+28,14,app.lessonCompleted(lesson)?success:muted);
+ }
+ void lessonAction(){
+  if(app.lessonCompleted(lesson)){setStage(3);codeVisible=false;return;}
+  if(app.labPassed(lesson)){setStage(1);question=app.solved(lesson,0)?1:0;app.resume(lesson,stage,question);codeVisible=false;return;}
+  if(currentResult()&&result.allPassed()){complete();return;}
+  codeVisible=true;startRun();
  }
  void lessonNavigation(Rectangle r){
   clipping(r);DrawRectangleRec(r,bg);
@@ -587,7 +614,7 @@ struct ReferenceApp {
   if(page==Page::Review){reviewContent(x,y,w);extent=y+scroll+40;return;}
   for(int i=0;i<static_cast<int>(lessons.size());++i){
    surface({x,y,w,118});text(lessons[i].title,x+24,y+20,22,fg,true);
-   text(std::to_string(app.completed(i))+" / 2 practice solved  |  "+(app.lessonCompleted(i)?"Lab complete":"Lab not complete"),x+24,y+58,16,muted);
+   text(std::to_string(app.completed(i))+" / 2 checks solved  |  "+(app.labPassed(i)?"Lab passed":"Lab not passed")+"  |  "+std::to_string(app.learningUnits(i))+" / 3 tasks",x+24,y+58,16,muted);
    if(button("data:"+lessons[i].id,"Open lesson",{x+w-174,y+38,150,42}))openLesson(i);y+=142;
   }extent=y+scroll+40;
  }
@@ -622,6 +649,7 @@ struct ReferenceApp {
   EndScissorMode();if(page!=Page::Lesson)scrollbar(GetScreenWidth()-8,88,GetScreenHeight()-120,scroll,extent-80);header();popup();EndScissorMode();helpOverlay();leaveDialog();closeFailure();EndScissorMode();footer();previousControls=controls;scrollPage();
  }
  void testInputValue(){testValue=question==0?"5":"int";
+  if(testAction==6)testValue="incorrect";
   if(action=="type:note")testValue="My saved lesson note.";
   if(action=="type:name")testValue="Tymofii";
   if(action=="type:search")testValue="C++";
@@ -637,9 +665,10 @@ struct ReferenceApp {
   if(testAction>=testActions.size())return;
   action=testActions[testAction];testInputValue();
   if(action=="wait-run"){if(!busy){++testAction;testIdle=0;}action.clear();return;}
-  const std::set<std::string> codeActions{"set-solution","edit-source","assert-stale","run-code","mark-complete"};
+  const std::set<std::string> codeActions{"set-solution","edit-source","assert-stale","run-code","mark-complete","assert-auto-complete","assert-run-failed"};
   if(codeActions.count(action)&&referenceLayout(GetScreenWidth(),GetScreenHeight()).compact&&!codeVisible)action="code-view";
-  if(action=="tab:notes"&&codeVisible)action="material-view";
+  const std::set<std::string> materialActions{"type:answer","check-answer","next-question","run-exercise","tab:notes"};
+  if(materialActions.count(action)&&referenceLayout(GetScreenWidth(),GetScreenHeight()).compact&&codeVisible)action="material-view";
   if(++testIdle>180){std::cerr<<"Reference failure: step="<<testAction<<" width="<<GetScreenWidth()<<" codeVisible="<<codeVisible<<" stage="<<stage<<" practice="<<app.completed(lesson)<<" compiled="<<result.compiled<<" passed="<<result.passed<<" current="<<currentResult()<<" diagnostics="<<result.diagnostics<<'\n';captureScreenshot((std::filesystem::path(options.profile)/"failed-reference.png").c_str());throw std::runtime_error("Reference journey could not activate "+action);}
  }
  void finishTestFrame(){
@@ -653,6 +682,7 @@ struct ReferenceApp {
   if(!options.referenceTest||testAction<testActions.size())return false;
   auto& e=study.entries[lessons[0].id];
   if(!app.lessonCompleted(0)||!e.bookmark||e.note!="My saved lesson note."||study.preferences.name!="Tymofii"||study.preferences.goal!=3||study.preferences.editorSize!=16||!study.preferences.lightEditor)throw std::runtime_error("Reference journey persistence assertion failed");
+  if(app.profile.evidence.at(lessons[0].questions[0].id).attempts!=2)throw std::runtime_error("Changed answers must record twice; duplicate clicks once");
   StudyStore restored(store);if(restored.preferences.name!="Tymofii"||restored.entries.at(lessons[0].id).note!="My saved lesson note."||store.load().achievements.empty())throw std::runtime_error("Reference saved state reload failed");
   std::cout<<"Reference screen journey: PASS\n";return true;
  }
