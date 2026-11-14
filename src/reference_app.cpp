@@ -43,7 +43,7 @@ struct ReferenceApp {
  Preferences form;std::string search,answer,feedback,notice,focus,action,acted;Verdict verdict=Verdict::Invalid;
  std::map<std::string,TextInput> fields;std::map<std::string,CodeEditor> editors;
  std::map<std::string,float> editorY,editorX;std::vector<std::string> controls,previousControls;
- KeyboardModifiers mods{};bool consumed=false,wheelUsed=false,keyFocus=false;
+ KeyboardModifiers mods{};bool consumed=false,wheelUsed=false,keyFocus=false,tabNavigation=false;
  int dropdown=0,dropdownChoice=0;Rectangle dropdownAnchor{};std::string dropdownFocus;
  std::future<LabResult> future;std::atomic_bool cancel{false};LabResult result;bool busy=false;
  int resultLesson=-1;unsigned long runGeneration=0;double editedAt=0;bool dirty=false;
@@ -59,10 +59,10 @@ struct ReferenceApp {
   const char* paths[]={"/System/Library/Fonts/Supplemental/Arial.ttf","/System/Library/Fonts/Supplemental/Arial Bold.ttf","/System/Library/Fonts/Supplemental/Andale Mono.ttf"};
   auto font=LoadFontEx(paths[family],pixels,nullptr,0);SetTextureFilter(font.texture,TEXTURE_FILTER_BILINEAR);fonts[key]=font;return font;
  }
- float measure(const std::string& s,float size,bool code=false){return MeasureTextEx(fontAt(size,code),s.c_str(),size,.2f).x;}
+ float measure(const std::string& s,float size,bool code=false){return MeasureTextEx(fontAt(size,code),s.c_str(),size,code?0.f:.2f).x;}
  void drawText(const std::string& s,Vector2 position,float size,Color color,bool code=false,bool heavy=false){
   float scale=pixelScale();position.x=std::round(position.x*scale)/scale;position.y=std::round(position.y*scale)/scale;
-  DrawTextEx(fontAt(size,code,heavy),s.c_str(),position,size,.2f,color);
+  DrawTextEx(fontAt(size,code,heavy),s.c_str(),position,size,code?0.f:.2f,color);
  }
  void text(const std::string& s,float x,float y,float size=17,Color c=fg,bool heavy=false){drawText(s,{x,y},size,c,false,heavy);}
  float roundness(Rectangle r,float radius=10){return std::min(1.f,2*radius/std::min(r.width,r.height));}
@@ -90,16 +90,16 @@ struct ReferenceApp {
   if(consumed||(!pointer&&!key))return false;
   focus=id;keyFocus=key;consumed=true;acted=id;return true;
  }
- void buttonFace(const std::string& label,Rectangle r,bool main,bool enabled,bool quiet,bool hot,bool active){
+ void buttonFace(const std::string& label,Rectangle r,bool main,bool enabled,bool quiet,bool hot,bool active,bool chosen){
   Color fill=main?primary:Color{31,33,38,255};Color border=main?primary:Color{93,104,122,255};
   if(hot){fill=main?Color{80,123,228,255}:selected;SetMouseCursor(MOUSE_CURSOR_POINTING_HAND);}
-  if(!quiet)surface(r,fill,border);else if(hot)surface(r,fill,fill);
+  if(!quiet)surface(r,fill,border);else if(hot||chosen)surface(r,selected,selected);
   if(active&&keyFocus){Rectangle ring{r.x-3,r.y-3,r.width+6,r.height+6};DrawRectangleRoundedLinesEx(ring,roundness(ring,13),12,2,accent);}
   float fs=16;while(fs>13&&measure(label,fs)>r.width-24)--fs;text(label,r.x+12,r.y+(r.height-fs)/2,fs,enabled?fg:muted);
  }
- bool button(const std::string& id,const std::string& label,Rectangle r,bool main=false,bool enabled=true,bool quiet=false){
+ bool button(const std::string& id,const std::string& label,Rectangle r,bool main=false,bool enabled=true,bool quiet=false,bool chosen=false){
   if(enabled&&inView(r))controls.push_back(id);
-  bool hot=enabled&&hit(r,id);buttonFace(label,r,main,enabled,quiet,hot,focus==id);
+  bool hot=enabled&&hit(r,id);buttonFace(label,r,main,enabled,quiet,hot,focus==id,chosen);
   return activate(id,hot,enabled);
  }
  std::vector<std::string> wrappedRows(const std::string& value,float width,float size){
@@ -237,10 +237,11 @@ struct ReferenceApp {
   if(repeat(KEY_UP))editor.vertical(-1,mods.shift);if(repeat(KEY_DOWN))editor.vertical(1,mods.shift);
   if(repeat(KEY_HOME))editor.moveTo(0,mods.shift);if(repeat(KEY_END))editor.moveTo(editor.value().size(),mods.shift);
  }
- void editCode(CodeEditor& editor){
+ void editCode(CodeEditor& editor,bool source){
   clipboard(editor);moveEditor(editor);
-  int c;while((c=GetCharPressed()))if(acceptTextCharacter(c,mods))editor.insert(std::string(1,static_cast<char>(c)));
-  if(IsKeyPressed(KEY_ENTER))editor.insert("\n");if(IsKeyPressed(KEY_TAB))editor.indent(mods.shift);
+  int c;while((c=GetCharPressed()))if(acceptTextCharacter(c,mods)){if(source)editor.typeCharacter(static_cast<char>(c));else editor.insert(std::string(1,static_cast<char>(c)));}
+  if(IsKeyPressed(KEY_ENTER)){if(source)editor.newline();else editor.insert("\n");}
+  if(IsKeyPressed(KEY_TAB)&&!tabNavigation)editor.indent(mods.shift);
   if(repeat(KEY_BACKSPACE))editor.backspace();if(repeat(KEY_DELETE))editor.eraseForward();
  }
  void fieldKeys(TextInput& field,size_t max){
@@ -383,7 +384,7 @@ struct ReferenceApp {
   if(button("all-courses","<  All courses",{r.x+12,r.y+r.height-64,r.width-24,44},false,true,true))navigate(Page::Courses);
  }
  void moduleRow(int i,Rectangle r){
-  if(i==lesson)DrawRectangleRounded(r,.2f,8,selected);
+  if(i==lesson)surface(r,selected,selected);
   if(button("module:"+lessons[i].id,"",r,false,true,true))openLesson(i);
   Color color=app.lessonCompleted(i)?success:i==lesson?accent:muted;DrawCircleLines(r.x+20,r.y+25,9,color);
   if(app.lessonCompleted(i)){DrawLineEx({r.x+15,r.y+25},{r.x+19,r.y+29},2,color);DrawLineEx({r.x+19,r.y+29},{r.x+26,r.y+20},2,color);}
@@ -427,7 +428,7 @@ struct ReferenceApp {
   materialTabs(r.x,r.width);clipping({r.x,140,r.width,r.y+r.height-140});float x=r.x+28,width=r.width-56,y=160-materialScroll;
   if(tab==1){text("Your lesson notes",x,y,25,fg,true);paragraph("Private notes, saved on this Mac.",x,y+42,width,16);editorWidget("notes",notes(),{x,y+82,width,std::max(180.f,r.height-210)},16,false);return;}
   if(tab==2){text("Discussion",x,y,25,fg,true);y=paragraph("Shared discussions are not connected in this offline app. Your private lesson notes are always available.",x,y+50,width,18);if(button("open-notes","Open Notes",{x,y+20,170,44},true))tab=1;return;}
-  for(int i=0;i<4;++i){if(stage==i)DrawRectangleRounded({x+i*(width/4),y,width/4-4,36},.2f,8,selected);if(button("stage:"+std::to_string(i),std::vector<std::string>{"Read","Practice","Fresh","Summary"}[i],{x+i*(width/4),y,width/4-4,36},false,true,true))setStage(i);}
+  for(int i=0;i<4;++i)if(button("stage:"+std::to_string(i),std::vector<std::string>{"Read","Practice","Fresh","Summary"}[i],{x+i*(width/4),y,width/4-8,36},false,true,true,stage==i))setStage(i);
   y+=66;text(lessons[lesson].title,x,y,25,fg,true);y+=48;
   if(stage==0){y=paragraph(lessons[lesson].body,x,y,width,app.profile.textSize,fg)+24;text("Your turn",x,y,23,fg,true);y=paragraph(labFor(lessons[lesson].id).instructions,x,y+42,width,18,fg)+24;if(button("start-practice","Start practice",{x,y,200,44},true))setStage(1);y+=64;}
   else if(stage==1 || stage==2)prediction(x,y,width);
@@ -443,15 +444,29 @@ struct ReferenceApp {
   size_t offset=0;for(size_t i=0;i<row;++i)offset+=rows[i].size()+1;
   editor.moveTo(offset+std::min(col,rows[row].size()),mods.shift||!IsMouseButtonPressed(MOUSE_BUTTON_LEFT));
  }
+ Color syntaxColor(SyntaxKind kind,Color plain){
+  const Color dark[]={fg,{195,157,255,255},{110,190,245,255},{245,190,126,255},{152,209,161,255},{139,155,145,255},{135,171,235,255},{232,214,155,255}};
+  const Color light[]={{35,43,57,255},{121,52,165,255},{17,91,151,255},{151,78,15,255},{35,111,63,255},{89,107,91,255},{58,89,155,255},{123,79,23,255}};
+  if(kind==SyntaxKind::Plain)return plain;return (study.preferences.lightEditor?light:dark)[static_cast<int>(kind)];
+ }
+ void syntaxRow(const std::string& row,size_t offset,const std::vector<SyntaxToken>& tokens,Vector2 position,float size,Color ink,bool source){
+  if(!source){drawText(row,position,size,ink,true);return;}
+  float cell=measure("M",size,true);
+  for(const auto& token:tokens){
+   size_t a=std::max(offset,token.start),b=std::min(offset+row.size(),token.start+token.length);if(b<=a)continue;
+   drawText(row.substr(a-offset,b-a),{position.x+(a-offset)*cell,position.y},size,syntaxColor(token.kind,ink),true);
+  }
+ }
  void editorRows(CodeEditor& editor,Rectangle r,float size,const std::string& id,bool source){
   float y=r.y+16-editorY[id],cell=measure("M",size,true);size_t offset=0;
   Color ink=source&&study.preferences.lightEditor?Color{35,43,57,255}:fg;
+  auto tokens=source?lexCxx(editor.value()):std::vector<SyntaxToken>{};
   for(const auto& row:editor.lines()){
    if(y+size>=r.y && y<r.y+r.height){
     text(std::to_string(1+std::count(editor.value().begin(),editor.value().begin()+offset,'\n')),r.x+10,y,size,muted);
     size_t a=std::max(offset,editor.selectionStart()),b=std::min(offset+row.size(),editor.selectionEnd());
-    if(b>a)DrawRectangleRec({r.x+48+(a-offset)*cell-editorX[id],y,(b-a)*cell,size*1.6f},selected);
-    drawText(row,{r.x+48-editorX[id],y},size,row.rfind("//",0)==0?muted:ink,true);
+    if(b>a)DrawRectangleRec({r.x+48+(a-offset)*cell-editorX[id],y,(b-a)*cell,size*1.6f},source&&study.preferences.lightEditor?Color{192,213,245,255}:selected);
+    syntaxRow(row,offset,tokens,{r.x+48-editorX[id],y},size,ink,source);
     if(focus==id && editor.cursor()>=offset && editor.cursor()<=offset+row.size())DrawRectangleRec({r.x+48+(editor.cursor()-offset)*cell-editorX[id],y,2,size+2},accent);
    }offset+=row.size()+1;y+=size*1.6f;
   }
@@ -471,7 +486,7 @@ struct ReferenceApp {
   if(inView(r))controls.push_back(id);surface(r,source&&study.preferences.lightEditor?Color{239,241,245,255}:codeBg);
   editorPointer(editor,r,size,id);auto before=editor.value();
   if(action=="type:note" && id=="notes" && hit(r,id)){editor.set(testValue);acted=action;consumed=true;}
-  if(!options.referenceTest && focus==id && IsWindowFocused() && !dropdown){auto cursor=editor.cursor();editCode(editor);if(cursor!=editor.cursor())followCaret(editor,r,size,id);}
+  if(!options.referenceTest && focus==id && IsWindowFocused() && !dropdown){auto cursor=editor.cursor();editCode(editor,source);if(cursor!=editor.cursor())followCaret(editor,r,size,id);}
   if(before!=editor.value())saveEditor(id,editor);
   editorWheel(editor,r,size,id);
   auto outer=clip;clipping({std::max(r.x+1,outer.x),std::max(r.y+1,outer.y),r.width-2,std::max(1.f,std::min(r.y+r.height,outer.y+outer.height)-std::max(r.y+1,outer.y))});editorRows(editor,r,size,id,source);clipping(outer);
@@ -589,7 +604,7 @@ struct ReferenceApp {
   if(!IsKeyPressed(KEY_TAB)||focus=="source"||focus=="notes")return;
   if(previousControls.empty())return;
   auto it=std::find(previousControls.begin(),previousControls.end(),focus);int index=it==previousControls.end()?-1:it-previousControls.begin();
-  index=(index+(mods.shift?-1:1)+previousControls.size())%previousControls.size();focus=previousControls[index];keyFocus=true;
+  index=(index+(mods.shift?-1:1)+previousControls.size())%previousControls.size();focus=previousControls[index];keyFocus=true;tabNavigation=true;
  }
  void scrollPage(){
   if(wheelUsed)return;float wheel=GetMouseWheelMove();if(!wheel)return;
@@ -601,7 +616,7 @@ struct ReferenceApp {
   DrawRectangleRounded({x,top+position,4,thumb},1,8,Color{85,94,111,255});
  }
  void draw(){
-  controls.clear();consumed=false;acted.clear();wheelUsed=false;mods=currentKeyboardModifiers();keyboard();SetMouseCursor(MOUSE_CURSOR_DEFAULT);
+  controls.clear();consumed=false;tabNavigation=false;acted.clear();wheelUsed=false;mods=currentKeyboardModifiers();keyboard();SetMouseCursor(MOUSE_CURSOR_DEFAULT);
   clipping({0,80,static_cast<float>(GetScreenWidth()),GetScreenHeight()-104.f});
   if(page==Page::Learning||page==Page::Courses)catalogue();else if(page==Page::Settings)settings();else if(page==Page::Lesson)lessonScreen();else learningData();
   EndScissorMode();if(page!=Page::Lesson)scrollbar(GetScreenWidth()-8,88,GetScreenHeight()-120,scroll,extent-80);header();popup();EndScissorMode();helpOverlay();leaveDialog();closeFailure();EndScissorMode();footer();previousControls=controls;scrollPage();
@@ -630,7 +645,7 @@ struct ReferenceApp {
  void finishTestFrame(){
   if(action.empty()||acted!=action)return;
   if(action=="code-view"||action=="material-view")return;
-  if(action=="save-preferences"&&!options.capture.empty()){pendingImage="settings-footer.png";captureDelay=2;}
+  if(!options.capture.empty()){if(action=="save-preferences")pendingImage="settings-footer.png";if(action=="run-code")pendingImage="highlighted-editor.png";captureDelay=2;}
   ++testAction;testIdle=0;
  }
  void captureFrame(){if(pendingImage.empty()||--captureDelay>0)return;captureScreenshot((std::filesystem::path(options.capture)/pendingImage).c_str());pendingImage.clear();}
