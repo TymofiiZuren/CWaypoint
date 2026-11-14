@@ -1,3 +1,5 @@
+> **Current status — 14 November 2026:** The user approved WASI SDK 34 and Wasmtime 50.0.1. The pinned archives have been checksum-verified, their licences are bundled, and the offline sandbox helper and real C/C++ lab tests pass. Dependency-choice language below records the earlier feasibility stage. See [the implemented runtime contract](reference-runtime.md) for current setup, limits and validation evidence.
+
 # Runner feasibility — 14 November 2026
 
 The reference-design plan is approved. Its first implementation gate is real
