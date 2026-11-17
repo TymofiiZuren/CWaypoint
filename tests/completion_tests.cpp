@@ -29,7 +29,7 @@ int main(){
  check(app.submitEdited(0,0,"").kind==Verdict::Invalid);
  check(app.submitEdited(0,0,lessons[0].questions[0].answer).kind==Verdict::Correct);
  check(app.profile.evidence.at(lessons[0].questions[0].id).attempts==attempts);
- check(app.learningUnits(0)==1&&app.courseProgress("C")==11);check(app.reset());
+ check(app.learningUnits(0)==1&&app.courseProgress("C")==6);check(app.reset());
  r.sourceHash=sourceHash(exercise.solution);
  check(app.recordLabResult(0,r,store.activeGeneration()));
  check(app.labPassed(0)&&app.learningUnits(0)==1&&!app.lessonCompleted(0));
@@ -38,7 +38,7 @@ int main(){
  for(int q=0;q<2;++q)check(app.submitEdited(0,q,lessons[0].questions[q].answer).kind==Verdict::Correct);
  check(app.learningUnits(0)==3&&app.lessonCompleted(0)&&app.completedToday()==1);
  auto persisted=store.load();check(persisted.achievements.size()==1&&persisted.completionDays.size()==1);
- Controller restarted(lessons,store);check(restarted.learningUnits(0)==3&&restarted.courseProgress("C")==33);
+ Controller restarted(lessons,store);check(restarted.learningUnits(0)==3&&restarted.courseProgress("C")==20);
 auto failing=path/"save-failure";Store failedStore(failing);Controller failed(lessons,failedStore);
  check(failed.issue(0,0));std::filesystem::create_directory(failing/"generation-1.save.tmp");
  check(failed.submitEdited(0,0,lessons[0].questions[0].answer).kind==Verdict::Invalid);

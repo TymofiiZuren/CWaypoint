@@ -1,4 +1,5 @@
 #include "lab.hpp"
+#include "curriculum.hpp"
 #include <CommonCrypto/CommonDigest.h>
 #include <iomanip>
 #include <sstream>
@@ -8,6 +9,8 @@ std::string sourceHash(const std::string& source){
  std::ostringstream out;for(unsigned char c:digest)out<<std::hex<<std::setw(2)<<std::setfill('0')<<static_cast<int>(c);return out.str();
 }
 LabExercise labFor(const std::string& id){
+ auto extra = additionalLab(id);
+ if (!extra.cases.empty()) return extra;
  LabExercise e;e.lessonId=id;e.language=id=="cpp-strings" ? "cpp":"c";
  if(id=="cpp-strings"){
   e.instructions="Read a name, then print Hello, followed by the name and an exclamation mark. Run both examples.";

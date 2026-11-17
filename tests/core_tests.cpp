@@ -304,7 +304,7 @@ int main() {
       check(c.completed(0) == 2 && c.completed(1) == 2,
             "both tracks practice complete");
       check(c.nextLesson("C") == 2, "completed practice skipped");
-      check(c.nextLesson("C++") == -1, "finished track has no suggestion");
+      check(lessons.at(c.nextLesson("C++")).id == "cpp-references", "next unfinished CPP lesson suggested");
       c.resume(1, 3);
     }
     {

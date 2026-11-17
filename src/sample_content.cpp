@@ -1,4 +1,5 @@
 #include "core.hpp"
+#include "curriculum.hpp"
 #include "lesson_adapter.hpp"
 namespace cw {
 std::vector<Lesson> sampleLessons() {
@@ -107,6 +108,8 @@ std::vector<Lesson> sampleLessons() {
   lessons[3].questions[1].code = lessons[3].code;
   lessons[3].questions[1].code.replace(lessons[3].questions[1].code.find("50"),2,"49");
   lessons[3].questions[2].code = "int height = 120;\nif (height > 120) {\n    puts(\"open\");\n} else {\n    puts(\"closed\");\n}";
+  for (auto lesson : additionalLessons())
+    lessons.push_back(std::move(lesson));
   return lessons;
 }
 std::vector<Comparison> comparisons() {
