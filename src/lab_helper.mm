@@ -32,7 +32,7 @@ std::filesystem::path workspace(){
 ProcessResult compile(const Request& r,const std::filesystem::path& tools,const std::filesystem::path& job){
  auto source=job/(r.language=="c" ? "main.c":"main.cpp");std::ofstream f(source);f<<r.source;f.close();
  auto compiler=tools/"wasi-sdk"/"bin"/(r.language=="c" ? "clang":"clang++");
- return runProcess({compiler.string(),r.language=="c" ? "-std=c17":"-std=c++17","-O0",source.string(),"-o",(job/"program.wasm").string()},"",15,&stopped,65536,false);
+ return runProcess({compiler.string(),r.language=="c" ? "-std=c17":"-std=c++17","-fno-exceptions","-O0",source.string(),"-o",(job/"program.wasm").string()},"",15,&stopped,65536,false);
 }
 ProcessResult execute(const std::string& input,const std::filesystem::path& tools,const std::filesystem::path& job){
  return runProcess({(tools/"wasmtime").string(),"run","-Ccache=n","-Wfuel=10000000","-Wtimeout=2s","-Wmax-memory-size=67108864","-Sinherit-env=false","-Sinherit-network=false","-Sthreads=false",(job/"program.wasm").string()},input,3,&stopped,65536,false);

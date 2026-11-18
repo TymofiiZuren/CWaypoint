@@ -7,7 +7,7 @@ using namespace cw;
 void check(bool b,const char* why){if(!b)throw std::runtime_error(why);}
 int main(int argc,char**argv){
  check(argc==3,"helper/tools arguments");
- for(const auto& id:{"c-variables","cpp-strings","c-pointers","c-conditions"}){
+ for(const auto& id:{"c-variables","cpp-strings","c-pointers","c-conditions","c-loops","c-functions","cpp-references","cpp-vectors"}){
   auto e=labFor(id);auto r=runLab(e,e.solution,argv[1],argv[2]);
   if(!r.allPassed()){std::cerr<<id<<": compiled="<<r.compiled<<" tests="<<r.runs.size()<<" "<<r.diagnostics<<"\n";for(auto& run:r.runs)std::cerr<<run.exitCode<<" "<<run.error<<" "<<run.output<<"\n";}
   check(r.allPassed(),"real isolated language fixture failed");

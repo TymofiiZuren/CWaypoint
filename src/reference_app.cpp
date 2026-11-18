@@ -37,6 +37,7 @@ struct ReferenceApp {
  const AppOptions& options;const std::vector<Lesson>& lessons;Store& store;Controller& app;StudyStore study;
  Rectangle clip{0,0,5000,5000};bool targetSeen=false;
  std::map<std::pair<int,int>,Font> fonts;Texture2D fire{};Page page=Page::Learning;
+ float moduleScroll=0;
  float outputScroll=0,outputExtent=0,scroll=0,extent=0,materialScroll=0,materialExtent=0;int lesson=0,stage=0,question=0,tab=0;
  bool codeVisible=false,drawer=false,modulesOpen=true,showData=false,showHelp=false,resetCode=false,resetProgress=false,exitConfirm=false,closeApproved=false;
  int pendingPage=-1;bool leaving=false;
@@ -380,8 +381,27 @@ struct ReferenceApp {
   text("Your progress",r.x+20,158,15,muted);text(std::to_string(progress)+"%",r.x+r.width-55,158,15);
   DrawRectangleRec({r.x+20,188,r.width-40,4},edge);if(progress)DrawRectangleRec({r.x+20,188,(r.width-40)*progress/100,4},accent);
   if(button("collapse-modules","COURSE CONTENT",{r.x+8,210,r.width-16,38},false,true,true))modulesOpen=!modulesOpen;
-  float y=264;if(modulesOpen)for(int i=0;i<static_cast<int>(lessons.size());++i)if(lessons[i].track==lessons[lesson].track){moduleRow(i,{r.x+12,y,r.width-24,72});y+=86;}
+  if (modulesOpen) drawModuleList({r.x,264,r.width,std::max(0.f,r.y+r.height-340)});
+  clipping(r);
   if(button("all-courses","<  All courses",{r.x+12,r.y+r.height-64,r.width-24,44},false,true,true))navigate(Page::Courses);
+ }
+ void drawModuleList(Rectangle bounds) {
+  int count=0;
+  for (const auto& item:lessons) if(item.track==lessons[lesson].track) ++count;
+  const float limit=std::max(0.f,count*86.f-bounds.height);
+  if (CheckCollisionPointRec(GetMousePosition(),bounds) && GetMouseWheelMove()) {
+   moduleScroll-=GetMouseWheelMove()*48;
+   wheelUsed=true;
+  }
+  moduleScroll=std::clamp(moduleScroll,0.f,limit);
+  clipping(bounds);
+  float y=bounds.y-moduleScroll;
+  for(int i=0;i<static_cast<int>(lessons.size());++i) {
+   if(lessons[i].track!=lessons[lesson].track) continue;
+   moduleRow(i,{bounds.x+12,y,bounds.width-24,72});
+   y+=86;
+  }
+  if(limit>0) DrawRectangle(bounds.x+bounds.width-5,bounds.y+(bounds.height-24)*moduleScroll/limit,3,24,accent);
  }
  void moduleRow(int i,Rectangle r){
   if(i==lesson)surface(r,selected,selected);
@@ -435,7 +455,7 @@ struct ReferenceApp {
   y=paragraph(exercise.instructions,x,y,width,18,fg)+16;
   for(const auto& test:exercise.cases)y=paragraph("Input: "+escaped(test.input)+"   Expected: "+escaped(test.expected),x,y,width,15,muted)+8;
   if(button("run-exercise",busy?"Running...":"Run & check your code",{x,y,width,44},true,!busy)){codeVisible=true;startRun();}y+=62;
-  y=paragraph(app.labPassed(lesson)?"Coding exercise passed and saved.":"Edit the code in the workbench, then run it against both examples. Passing results save automatically.",x,y,width,16,app.labPassed(lesson)?success:muted)+20;
+  y=paragraph(app.labPassed(lesson)?"Coding exercise passed and saved.":"Edit the code in the workbench, then run it against the authored tests. Passing results save automatically.",x,y,width,16,app.labPassed(lesson)?success:muted)+20;
   y=paragraph("Knowledge checks are recorded separately. Complete both checks and the coding exercise to finish this lesson.",x,y,width,16)+24;
  }
  void material(Rectangle r){
