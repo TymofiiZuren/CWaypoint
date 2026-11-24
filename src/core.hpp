@@ -24,6 +24,11 @@ struct Lesson {
   std::vector<Step> steps;
   int revision = 1;
 };
+// Only output predictions inherit the lesson's worked example. Other question
+// types can supply their own snippet when the prompt needs one.
+inline const std::string& questionContext(const Lesson& lesson,const Question& question) {
+  return question.type==QuestionType::Output&&question.code.empty()?lesson.code:question.code;
+}
 struct Comparison {
   std::string title, c, cpp, explanation;
 };

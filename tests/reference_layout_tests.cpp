@@ -1,7 +1,15 @@
 #include "reference_layout.hpp"
-#include <stdexcept>
 #include <initializer_list>
-int main(){for(int width:{960,1280,1600,2036})for(int height:{640,840}){
- auto l=cw::referenceLayout(width,height);if(l.bodyBottom<=l.bodyTop || l.materialW<400)throw std::runtime_error("material bounds");
- if(!l.compact && (l.codeW<600 || l.rail+l.materialW+l.codeW!=width))throw std::runtime_error("workspace bounds");
-}}
+#include <stdexcept>
+
+int main() {
+  for (int width : {960, 1280, 1600, 2036}) {
+    for (int height : {640, 840}) {
+      const auto layout = cw::referenceLayout(width, height);
+      if (layout.width > 760 || layout.width < 680 || layout.x * 2 + layout.width != width)
+        throw std::runtime_error("Lesson content must fit in one centered column");
+      if (layout.bodyBottom - layout.bodyTop < 450 || layout.bodyBottom + layout.footerHeight > height - 24)
+        throw std::runtime_error("Lesson content and fixed actions must fit inside the window");
+    }
+  }
+}

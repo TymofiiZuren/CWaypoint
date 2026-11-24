@@ -34,7 +34,7 @@ Lesson variablesLesson() {
         {"c.variables.output","What does the example print?",ExerciseType::PredictOutput,{"5\n"},
          "score starts at 3; adding 2 stores 5. printf prints 5 followed by a newline.",
          {"Trace the statements in order.","The right side adds 2 to the current score of 3.","3 + 2 is 5, so the output is 5."},false},
-        {"c.variables.token","Fill the type: ___ score = 3;",ExerciseType::FillToken,{"int"},
+        {"c.variables.token","Fill in the three-letter C type for a whole number.",ExerciseType::FillToken,{"int"},
          "int declares an integer variable.",{"We need a whole-number type.","Use the basic signed integer type.","The declaration is int score = 3;."},false},
         {"c.variables.fresh","int a = 4; int b = a; a = 9; What does printf(\"%d\\n\", b) print?",ExerciseType::PredictOutput,{"4\n"},
          "b receives a copy of 4. Changing a later does not change b.",

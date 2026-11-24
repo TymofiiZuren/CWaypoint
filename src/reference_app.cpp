@@ -19,7 +19,10 @@
 #include <sstream>
 #include <thread>
 namespace cw {namespace {
-const Color bg{16,17,20,255},card{23,25,29,255},codeBg{19,21,25,255},edge{44,46,52,255},fg{231,233,239,255},muted{156,163,177,255},accent{99,138,242,255},primary{68,111,214,255},selected{34,47,72,255},success{99,203,162,255},errorColor{255,153,153,255},warm{255,166,104,255};
+const Color bg{17,21,32,255}, card{24,30,45,255}, codeBg{19,24,37,255},
+    edge{52,61,83,255}, fg{240,243,252,255}, muted{172,183,205,255},
+    accent{190,182,255,255}, primary{94,76,186,255}, selected{49,45,80,255},
+    success{120,228,184,255}, errorColor{255,165,167,255}, warm{255,191,121,255};
 std::filesystem::path executableFolder(){uint32_t size=4096;std::string path(size,'\0');if(_NSGetExecutablePath(path.data(),&size))return {};path.resize(path.find('\0'));return std::filesystem::weakly_canonical(path).parent_path();}
 std::filesystem::path toolFolder(){return executableFolder().parent_path()/"Resources/LabTools";}
 std::string initials(const std::string& name){if(name.empty())return "CW";std::string out(1,static_cast<char>(std::toupper(name.front())));auto p=name.find_last_of(' ');if(p!=name.npos && p+1<name.size())out+=static_cast<char>(std::toupper(name[p+1]));return out;}
@@ -33,13 +36,16 @@ void captureScreenshot(const char* path){
  bool saved=ExportImage(image,path);UnloadImage(image);if(!saved)throw std::runtime_error("Cannot save screenshot.");
 }
 enum class Page{Learning,Courses,Lesson,Settings,Progress,Review,Compare};
+enum LessonStep {Read,Practice,Solo,Summary,Coding};
 struct ReferenceApp {
  const AppOptions& options;const std::vector<Lesson>& lessons;Store& store;Controller& app;StudyStore study;
  Rectangle clip{0,0,5000,5000};bool targetSeen=false;
  std::map<std::pair<int,int>,Font> fonts;Texture2D fire{};Page page=Page::Learning;
- float moduleScroll=0;
- float outputScroll=0,outputExtent=0,scroll=0,extent=0,materialScroll=0,materialExtent=0;int lesson=0,stage=0,question=0,tab=0;
- bool codeVisible=false,drawer=false,modulesOpen=true,showData=false,showHelp=false,resetCode=false,resetProgress=false,exitConfirm=false,closeApproved=false;
+ int walkthroughStep=0;bool walkthroughVisible=false;
+ float scroll=0,extent=0,materialScroll=0,materialExtent=0;
+ int lesson=0,question=0;LessonStep stage=Read;
+ std::string courseTrack,hint,checkedAnswer;
+ bool showNotes=false,showResults=false,showData=false,showHelp=false,resetCode=false,resetProgress=false,exitConfirm=false,closeApproved=false;
  int pendingPage=-1;bool leaving=false;
  Preferences form;std::string search,answer,feedback,notice,focus,action,acted;Verdict verdict=Verdict::Invalid;
  std::map<std::string,TextInput> fields;std::map<std::string,CodeEditor> editors;
@@ -50,7 +56,17 @@ struct ReferenceApp {
  int resultLesson=-1;unsigned long runGeneration=0;double editedAt=0;bool dirty=false;
  int captureDelay=0;std::string pendingImage;
  size_t testAction=0;int testIdle=0,geometryAttempts=0;std::string testValue;int frames=0;bool testOk=true;
- std::vector<std::string> testActions{"nav:courses","course:C","stage:1","run-exercise","wait-run","assert-run-failed","type:answer","check-answer","type:answer","check-answer","check-answer","next-question","type:answer","check-answer","set-solution","run-exercise","wait-run","assert-auto-complete","edit-source","assert-stale","run-code","wait-run","assert-auto-complete","tab:notes","type:note","bookmark","nav:settings","type:name","goal","select:2","theme","select:1","font","select:2","save-preferences","nav:courses","type:search","clear-search","nav:learning"};
+ const std::vector<std::string> testActions{
+  "nav:courses","course:C","module:"+lessons[0].id,
+  "walk-toggle","walk-next","walk-back","walk-next","walk-toggle",
+  "lesson-next","type:answer","check-answer","check-answer","type:answer","check-answer",
+  "lesson-next","type:answer","check-answer","lesson-next",
+  "run-code","wait-run","assert-run-failed","set-solution","run-code","wait-run",
+  "assert-auto-complete","edit-source","assert-stale","editor-options","restore-starter","assert-restore-undo",
+  "run-code","wait-run","assert-auto-complete",
+  "lesson-next","tab:notes","type:note","tab:learn","exit-lesson",
+  "nav:settings","type:name","goal","select:2","theme","select:1","font","select:2",
+  "save-preferences","nav:courses","type:search","clear-search","nav:learning"};
  ReferenceApp(const AppOptions& o,const std::vector<Lesson>& l,Store& s,Controller& a):options(o),lessons(l),store(s),app(a),study(s),form(study.preferences){}
  ~ReferenceApp(){cancel.store(true);if(future.valid())future.wait();}
  float pixelScale(){return std::max(1.f,GetRenderWidth()/static_cast<float>(GetScreenWidth()));}
@@ -91,9 +107,14 @@ struct ReferenceApp {
   if(consumed||(!pointer&&!key))return false;
   focus=id;keyFocus=key;consumed=true;acted=id;return true;
  }
+ std::pair<Color,Color> buttonColors(bool primaryAction,bool hot,bool chosen){
+  if(primaryAction)return {hot?Color{113,93,210,255}:primary,primary};
+  if(chosen)return {selected,accent};
+  return {hot?selected:Color{33,40,58,255},Color{71,80,103,255}};
+ }
  void buttonFace(const std::string& label,Rectangle r,bool main,bool enabled,bool quiet,bool hot,bool active,bool chosen){
-  Color fill=main?primary:Color{31,33,38,255};Color border=main?primary:Color{93,104,122,255};
-  if(hot){fill=main?Color{80,123,228,255}:selected;SetMouseCursor(MOUSE_CURSOR_POINTING_HAND);}
+  const auto [fill,border]=buttonColors(main&&enabled,hot,chosen);
+  if(hot)SetMouseCursor(MOUSE_CURSOR_POINTING_HAND);
   if(!quiet)surface(r,fill,border);else if(hot||chosen)surface(r,selected,selected);
   if(active&&keyFocus){Rectangle ring{r.x-3,r.y-3,r.width+6,r.height+6};DrawRectangleRoundedLinesEx(ring,roundness(ring,13),12,2,accent);}
   float fs=16;while(fs>13&&measure(label,fs)>r.width-24)--fs;text(label,r.x+12,r.y+(r.height-fs)/2,fs,enabled?fg:muted);
@@ -135,14 +156,21 @@ struct ReferenceApp {
   if(page==Page::Settings&&preferencesChanged()){pendingPage=static_cast<int>(next);leaving=true;return;}
   if(busy)cancel.store(true);
   if(dirty && !study.save()){notice=study.notice;return;}
-  dirty=false;page=next;scroll=0;dropdown=0;drawer=false;focus.clear();showHelp=false;
+  dirty=false;page=next;scroll=0;dropdown=0;courseTrack.clear();focus.clear();showHelp=false;
   if(next==Page::Settings)form=study.preferences;
  }
  void openLesson(int index,bool restore=false){
   if(busy){cancel.store(true);notice="Stopping the current run. Choose the lesson again once it stops.";return;}
   if(dirty && !study.save()){notice=study.notice;return;}
-  lesson=index;stage=restore?app.profile.step:0;question=stage==2?2:restore?app.profile.question:0;
-  answer.clear();fields["answer"].set("");app.retry();app.resume(lesson,stage,question);page=Page::Lesson;scroll=materialScroll=0;tab=0;drawer=false;focus.clear();feedback.clear();
+  lesson=index;
+  LessonStep target=restore?static_cast<LessonStep>(app.profile.step):Read;
+  if(target==Summary&&!app.labPassed(index))target=Coding;
+  walkthroughStep=restore?app.profile.walkthrough:0;
+  walkthroughVisible=walkthroughStep>0;
+  const int savedQuestion=restore?app.profile.question:0;
+  page=Page::Lesson;
+  showNotes=false;
+  setStage(target,savedQuestion);
  }
  int nextInTrack(const std::string& track){for(int i=0;i<static_cast<int>(lessons.size());++i)if(lessons[i].track==track && !app.lessonCompleted(i))return i;for(int i=0;i<static_cast<int>(lessons.size());++i)if(lessons[i].track==track)return i;return 0;}
  int resumeIndex(){for(int i=0;i<static_cast<int>(lessons.size());++i)if(lessons[i].id==app.profile.lesson)return i;return 0;}
@@ -152,14 +180,16 @@ struct ReferenceApp {
  }
  void header(){
   clipping({0,0,static_cast<float>(GetScreenWidth()),80});
-  DrawRectangle(0,0,GetScreenWidth(),80,bg);line(0,79,GetScreenWidth());logo(30,23);text("CWaypoint",88,25,26,fg,true);
-  button("nav:learning","My learning",{260,20,128,44},false,true,true);
-  button("nav:courses","All courses",{392,20,124,44},false,true,true);
-  button("nav:settings","Settings",{520,20,100,44},false,true,true);
+  DrawRectangle(0,0,GetScreenWidth(),80,bg);line(0,79,GetScreenWidth());
+  if(page==Page::Lesson){lessonHeader();return;}
+  logo(30,23);text("CWaypoint",88,25,26,fg,true);
+  button("nav:learning","My learning",{260,20,128,44},false,true,true,page==Page::Learning);
+  button("nav:courses","All courses",{392,20,124,44},false,true,true,page==Page::Courses);
+  button("nav:settings","Settings",{520,20,100,44},false,true,true,page==Page::Settings);
   if(acted=="nav:learning")navigate(Page::Learning);if(acted=="nav:courses")navigate(Page::Courses);if(acted=="nav:settings")navigate(Page::Settings);
-  float active=page==Page::Courses?404:page==Page::Settings?532:272;text(page==Page::Courses?"All courses":page==Page::Settings?"Settings":"My learning",active,34,16,accent);
   const float x=GetScreenWidth()-208;surface({x,16,132,48},Color{36,27,22,255},Color{78,51,34,255});
-  DrawTexturePro(fire,{0,0,72,72},{x+12,24,30,32},{0,0},0,WHITE);text(std::to_string(studyStreak(app.profile.studyDays,localStudyDay()))+" days",x+52,32,17);
+  const int streak=studyStreak(app.profile.studyDays,localStudyDay());
+  DrawTexturePro(fire,{0,0,72,72},{x+12,24,30,32},{0,0},0,WHITE);text(std::to_string(streak)+(streak==1?" day":" days"),x+52,32,17);
   DrawCircle(GetScreenWidth()-42,40,20,Color{48,62,88,255});text(initials(study.preferences.name),GetScreenWidth()-55,33,14);
   if(!options.referenceTest && CheckCollisionPointCircle(GetMousePosition(),{static_cast<float>(GetScreenWidth()-42),40},22) && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))navigate(Page::Settings);
  }
@@ -171,28 +201,32 @@ struct ReferenceApp {
  void heading(const std::string& kicker,const std::string& title,const std::string& subtitle,float x,float y){text(kicker,x,y,13,accent);text(title,x,y+34,34,fg,true);text(subtitle,x,y+86,17,muted);}
  void streakCard(Rectangle r){
   surface(r,Color{27,24,22,255},Color{78,51,34,255});int days=studyStreak(app.profile.studyDays,localStudyDay());
-  DrawTexturePro(fire,{0,0,72,72},{r.x+28,r.y+40,58,66},{0,0},0,WHITE);text("YOUR DAILY FIRE",r.x+110,r.y+28,12,warm);
+  DrawTexturePro(fire,{0,0,72,72},{r.x+28,r.y+40,58,66},{0,0},0,WHITE);text("LEARNING STREAK",r.x+110,r.y+28,12,warm);
   text(std::to_string(days),r.x+110,r.y+58,36,fg,true);text("day streak",r.x+150,r.y+72,17);
   paragraph(days?"Keep your learning habit going.":"Every great streak starts with one lesson.",r.x+28,r.y+118,r.width-56,15,Color{190,170,153,255});
   const int marks[]={3,7,14,30};float w=(r.width-68)/4;
   for(int i=0;i<4;++i){DrawRectangleRounded({r.x+24+i*(w+6),r.y+166,w,4},1,8,days>=marks[i]?warm:Color{62,46,35,255});text(std::to_string(marks[i])+" days",r.x+25+i*(w+6),r.y+180,12,Color{190,170,153,255});}
   text("Today: "+std::to_string(app.completedToday())+" / "+std::to_string(study.preferences.goal)+" lessons",r.x+26,r.y+214,14,warm);
-  if(button("fuel","Fuel your flame",{r.x+24,r.y+r.height-66,r.width-48,44},true))resume();
+  if(button("fuel","Continue learning",{r.x+24,r.y+r.height-66,r.width-48,44},true))resume();
  }
  void resumeCard(Rectangle r){
-  surface(r);int i=resumeIndex();auto& l=lessons[i];text(app.profile.lesson.empty()?"YOUR FIRST CHAPTER":"PICK UP WHERE YOU LEFT OFF",r.x+26,r.y+28,13,accent);
-  text(l.track+" foundations",r.x+26,r.y+66,23,fg,true);text(l.title,r.x+26,r.y+106,16,muted);
-  paragraph(l.objective,r.x+26,r.y+144,r.width-52,18,fg);
-  if(study.preferences.nudge&&app.completedToday()==0)text("One lesson today. One step closer.",r.x+26,r.y+r.height-100,14,muted);
-  if(button("continue","Continue lesson",{r.x+26,r.y+r.height-70,190,44},true))resume();
+  surface(r);
+  const auto& item=lessons[resumeIndex()];
+  const bool started=!app.profile.lesson.empty();
+  text(item.track+" foundations",r.x+28,r.y+28,15,accent);
+  text(item.title,r.x+28,r.y+66,28,fg,true);
+  paragraph(item.objective,r.x+28,r.y+115,r.width-56,18,muted);
+  if(study.preferences.nudge&&app.completedToday()==0)
+   text("You have time for one short lesson today.",r.x+28,r.y+r.height-100,14,muted);
+  if(button("continue",started?"Continue lesson":"Start lesson",{r.x+28,r.y+r.height-70,176,44},true))resume();
  }
  void courseCard(const std::string& track,Rectangle r){
-  surface(r);surface({r.x+24,r.y+24,50,50},Color{31,33,38,255},Color{31,33,38,255});text(track,r.x+35,r.y+40,20,accent,true);
+  surface(r);surface({r.x+24,r.y+24,50,50},Color{24,39,53,255},Color{24,39,53,255});text(track,r.x+35,r.y+40,20,accent,true);
   text(track+" foundations",r.x+24,r.y+96,22,fg,true);
   paragraph(track=="C"?"Build a foundation with values, pointers and control flow.":"Explore strings, input and the building blocks of C++.",r.x+24,r.y+136,r.width-48,17);
   int count=0,done=0;for(int i=0;i<static_cast<int>(lessons.size());++i)if(lessons[i].track==track){++count;done+=app.lessonCompleted(i);}
   text("Beginner  /  "+std::to_string(count)+(count==1?" module  /  ":" modules  /  ")+std::to_string(done)+" complete  /  "+std::to_string(app.courseProgress(track))+"%",r.x+24,r.y+218,14,muted);
-  if(button("course:"+track,"Open course",{r.x+24,r.y+r.height-62,170,42},true))openLesson(nextInTrack(track));
+  if(button("course:"+track,"View lessons",{r.x+24,r.y+r.height-62,170,42},true)){courseTrack=track;scroll=0;}
  }
  float savedLessons(float x,float y,float w){
   bool heading=false;for(int i=0;i<static_cast<int>(lessons.size());++i){if(!study.entries[lessons[i].id].bookmark)continue;
@@ -210,19 +244,42 @@ struct ReferenceApp {
   if(!shown)paragraph("No matching courses. Clear your search to see the available C and C++ courses.",x,y,width,18);
   return shown;
  }
+ void home(){
+  const float width=760,x=(GetScreenWidth()-width)/2.f,y=128-scroll;
+  text("My learning",x,y,40,fg,true);
+  resumeCard({x,y+78,width,278});
+  extent=savedLessons(x,y+392,width)+scroll+32;
+ }
+ void coursePath(){
+  const float width=760,x=(GetScreenWidth()-width)/2.f;
+  float y=116-scroll;
+  if(button("back-courses","All courses",{x,y,128,38},false,true,true)){courseTrack.clear();scroll=0;return;}
+  y+=58;
+  text(courseTrack+" foundations",x,y,38,fg,true);
+  y+=64;
+  text(std::to_string(app.courseProgress(courseTrack))+"% complete",x,y,17,muted);
+  y+=48;
+  const int next=nextInTrack(courseTrack);
+  for(int i=0;i<static_cast<int>(lessons.size());++i){
+   if(lessons[i].track!=courseTrack)continue;
+   bool done=app.lessonCompleted(i);
+   surface({x,y,width,68});
+   text(lessons[i].title,x+22,y+24,18,fg,true);
+   const char* label=done?"Review":i==next?"Start lesson":"Open lesson";
+   if(button("module:"+lessons[i].id,label,{x+width-150,y+13,130,42},!done&&i==next))openLesson(i);
+   y+=80;
+  }
+  extent=y+scroll+36;
+ }
  void catalogue(){
-  float width=std::min(1120.f,GetScreenWidth()-96.f),x=(GetScreenWidth()-width)/2,y=120-scroll;
-  heading("YOUR NEXT CHAPTER",page==Page::Learning?"My learning":"All courses","Start from scratch or sharpen what you already know.",x,y);
-  y+=140;bool narrow=GetScreenWidth()<1100;float left=narrow?width:(width-24)*.62f;
-  resumeCard({x,y,left,296});streakCard({narrow?x:x+left+24,narrow?y+320:y,narrow?width:width-left-24,296});
-  y+=narrow?656:336;text("Explore the catalog",x,y+12,21,fg,true);
+  if(page==Page::Learning){home();return;}
+  if(!courseTrack.empty()){coursePath();return;}
+  const float width=std::min(1000.f,GetScreenWidth()-96.f),x=(GetScreenWidth()-width)/2,y=128-scroll;
+  text("All courses",x,y,40,fg,true);
   textField("search",search,{x+width-320,y,320,44},160,"Search courses...");
   if(!search.empty() && button("clear-search","Clear",{x+width-80,y+50,80,34},false,true,true))search.clear();
-  y+=84;float cardW=narrow?width:(width-24)/2;int shown=0;
-  shown=catalogueCards(x,y,width,cardW,narrow);
-  y+=((shown+(narrow?0:1))/(narrow?1:2))*324;
-  if(page==Page::Learning)y=savedLessons(x,y,width);
-  extent=y+scroll+40;
+  catalogueCards(x,y+108,width,(width-24)/2,false);
+  extent=y+scroll+452;
  }
  void clipboard(CodeEditor& editor){
   if(!mods.command && !mods.control)return;
@@ -328,7 +385,7 @@ struct ReferenceApp {
   const std::string intro="Make this space feel like yours. Preferences are saved only on this device.";
   const std::string appearance="Applies only to the code editor. The rest of CWaypoint stays dark.";
   const std::string explanation="One completed lesson keeps your streak alive. Your goal is a personal target, not a streak requirement.";
-  float w=r.width-56;r.height=766+paragraphHeight(intro,w,17)+paragraphHeight(appearance,w,16)+paragraphHeight(explanation,w,15);
+  float w=r.width-56;r.height=774+paragraphHeight(intro,w,17)+paragraphHeight(appearance,w,16)+paragraphHeight(explanation,w,15);
   surface(r);float x=r.x+28,y=r.y+28;text("Profile & learning",x,y,23,fg,true);y+=48;
   y=paragraph(intro,x,y,w,17)+28;
   text("Display name",x,y);y+=30;textField("name",form.name,{x,y,w,46},80,"Your name (optional)");y+=78;
@@ -375,100 +432,130 @@ struct ReferenceApp {
   if(busy){cancel.store(true);notice="Stopping the current run. Retry reset once it stops.";return;}
   if(app.reset()){study.syncGeneration();study.save();editors.clear();result={};resultLesson=-1;resetProgress=false;notice="Learning progress reset. Your preferences were kept.";}
  }
- void moduleRail(Rectangle r){
-  clipping(r);DrawRectangleRec(r,card);text(lessons[lesson].track+" foundations",r.x+20,112,22,fg,true);
-  int progress=app.courseProgress(lessons[lesson].track);
-  text("Your progress",r.x+20,158,15,muted);text(std::to_string(progress)+"%",r.x+r.width-55,158,15);
-  DrawRectangleRec({r.x+20,188,r.width-40,4},edge);if(progress)DrawRectangleRec({r.x+20,188,(r.width-40)*progress/100,4},accent);
-  if(button("collapse-modules","COURSE CONTENT",{r.x+8,210,r.width-16,38},false,true,true))modulesOpen=!modulesOpen;
-  if (modulesOpen) drawModuleList({r.x,264,r.width,std::max(0.f,r.y+r.height-340)});
-  clipping(r);
-  if(button("all-courses","<  All courses",{r.x+12,r.y+r.height-64,r.width-24,44},false,true,true))navigate(Page::Courses);
+ void setStage(LessonStep value,int practiceQuestion=0){
+  stage=value;
+  question=stage==Solo?2:stage==Practice?std::clamp(practiceQuestion,0,1):0;
+  answer.clear();fields["answer"].set("");feedback.clear();hint.clear();checkedAnswer.clear();
+  app.retry();materialScroll=0;showHelp=false;resetCode=false;focus.clear();
+  app.resume(lesson,stage==Coding?Summary:stage,question,stage==Read?walkthroughStep:0);
  }
- void drawModuleList(Rectangle bounds) {
-  int count=0;
-  for (const auto& item:lessons) if(item.track==lessons[lesson].track) ++count;
-  const float limit=std::max(0.f,count*86.f-bounds.height);
-  if (CheckCollisionPointRec(GetMousePosition(),bounds) && GetMouseWheelMove()) {
-   moduleScroll-=GetMouseWheelMove()*48;
-   wheelUsed=true;
-  }
-  moduleScroll=std::clamp(moduleScroll,0.f,limit);
-  clipping(bounds);
-  float y=bounds.y-moduleScroll;
-  for(int i=0;i<static_cast<int>(lessons.size());++i) {
-   if(lessons[i].track!=lessons[lesson].track) continue;
-   moduleRow(i,{bounds.x+12,y,bounds.width-24,72});
-   y+=86;
-  }
-  if(limit>0) DrawRectangle(bounds.x+bounds.width-5,bounds.y+(bounds.height-24)*moduleScroll/limit,3,24,accent);
- }
- void moduleRow(int i,Rectangle r){
-  if(i==lesson)surface(r,selected,selected);
-  if(button("module:"+lessons[i].id,"",r,false,true,true))openLesson(i);
-  Color color=app.lessonCompleted(i)?success:i==lesson?accent:muted;DrawCircleLines(r.x+20,r.y+25,9,color);
-  if(app.lessonCompleted(i)){DrawLineEx({r.x+15,r.y+25},{r.x+19,r.y+29},2,color);DrawLineEx({r.x+19,r.y+29},{r.x+26,r.y+20},2,color);}
-  paragraph(lessons[i].title,r.x+38,r.y+16,r.width-46,15,i==lesson?fg:muted);
- }
- void setStage(int value){stage=value;question=stage==2?2:0;answer.clear();fields["answer"].set("");feedback.clear();app.retry();materialScroll=0;app.resume(lesson,stage,question);if(stage==2)app.issue(lesson,2);}
- void materialTabs(float x,float width){
-  DrawRectangleRec({rintf(x+20+(tab==0?0:tab==1?80:160)),132,tab==2?100.f:64.f,2},accent);
-  if(button("tab:learn","Learn",{x+20,92,76,40},false,true,true))tab=0;
-  if(button("tab:notes","Notes",{x+100,92,76,40},false,true,true)){tab=1;codeVisible=false;}
-  if(button("tab:discussion","Discussion",{x+180,92,112,40},false,true,true)){tab=2;codeVisible=false;}
-  if(button("bookmark",study.entries[lessons[lesson].id].bookmark?"Saved":"Save",{x+width-80,92,70,40},false,true,true)){
-   auto& value=study.entries[lessons[lesson].id].bookmark;value=!value;if(!study.save())value=!value;
+ void lessonHeader(){
+  if(button("exit-lesson","Exit lesson",{26,20,116,42},false,true,true))navigate(Page::Learning);
+  const auto label=lessons[lesson].track+" foundations";
+  text(label,(GetScreenWidth()-measure(label,16))/2.f,33,16,muted);
+  if(button(showNotes?"tab:learn":"tab:notes",showNotes?"Back to lesson":"My notes",
+            {GetScreenWidth()-164.f,20,138,42},false,true,true)){
+   showNotes=!showNotes;materialScroll=0;focus.clear();
   }
  }
  void predictionAnswer(const Question& q,float x,float& y,float width){
-  if(q.type==QuestionType::Choice){for(const auto& choice:q.choices){if(button("answer-choice:"+choice,choice,{x,y,width,44},answer==choice))answer=choice;y+=54;}}
-  else{textField("answer",answer,{x,y,width,46});y+=64;}
+  if(q.type==QuestionType::Choice){
+   for(const auto& choice:q.choices){
+    const bool selected=answer==choice;
+    if(button("answer-choice:"+choice,choice,{x,y,width,48},false,true,false,selected))answer=choice;
+    y+=58;
+   }
+   return;
+  }
+  text("Your answer",x,y,15,muted,true);
+  y+=26;
+  const char* placeholder=q.type==QuestionType::Token?"Type the missing word or symbol":"Type the output or value";
+  textField("answer",answer,{x,y,std::min(width,460.f),50},1024,placeholder);
+  y+=66;
  }
  void retryProgressSave(float x,float& y,float width){
   if(!app.unsavedChanges||!store.writable())return;
   if(button("retry-progress-save","Retry saving progress",{x,y,width,42},true)){if(app.save())checkAnswer();else feedback=app.notice;}y+=56;
  }
  bool answerEnter(){return !options.referenceTest&&focus=="answer"&&IsKeyPressed(KEY_ENTER)&&!dropdown;}
+ bool answeredCorrectly() const{return !feedback.empty()&&answer==checkedAnswer&&verdict==Verdict::Correct;}
  void prediction(float x,float& y,float width){
-  if(stage==2 && !app.issue(lesson,2)){y=paragraph("This fresh check needs writable saved progress. Return to practice or open save details.",x,y,width,17,errorColor);return;}
-  auto& q=lessons[lesson].questions[question];text(stage==2?"Fresh check":"Knowledge check "+std::to_string(question+1)+" of 2",x,y,15,accent);y+=32;
-  y=paragraph(q.prompt,x,y,width,21,fg)+20;
-  const auto& source=q.code.empty()?lessons[lesson].code:q.code;std::istringstream in(source);std::string row;
-  while(std::getline(in,row)){drawText(row,{x,y},14,fg,true);y+=24;}y+=20;
+  if(stage==Solo && !app.issue(lesson,2)){y=paragraph("CWaypoint needs to save your progress on this Mac before you can try this question.",x,y,width,17,errorColor);return;}
+  const auto& item=lessons[lesson];
+  const auto& q=item.questions[question];
+  const auto& context=questionContext(item,q);
+  if(!context.empty())exampleCode(context,x,y,width);
   predictionAnswer(q,x,y,width);
-  if(button("check-answer","Check answer",{x,y,160,44},true))checkAnswer();
-  if(answerEnter())checkAnswer();y+=64;
-  if(!feedback.empty())y=paragraph(feedback,x,y,width,17,verdict==Verdict::Correct?success:errorColor)+16;
+  if(!answer.empty()&&!answeredCorrectly()&&answerEnter()){consumed=true;checkAnswer();}
+  if(!feedback.empty()&&answer==checkedAnswer)answerFeedback(x,y,width);
   retryProgressSave(x,y,width);
-  if(stage==1 && question==0 && button("next-question","Next knowledge check",{x,y,width,44})){question=1;app.retry();answer.clear();fields["answer"].set("");feedback.clear();app.resume(lesson,stage,question);}y+=60;
+  if(!answeredCorrectly())helpHints(x,y,width);
  }
- void checkAnswer(){auto value=app.submitEdited(lesson,question,answer);feedback=value.message;verdict=value.kind;if(value.kind==Verdict::Correct&&app.lessonCompleted(lesson)&&store.writable()&&!app.unsavedChanges)notice="Lesson complete. Progress and streak saved automatically.";}
+ void checkAnswer(){
+  auto value=app.submitEdited(lesson,question,answer);
+  checkedAnswer=answer;feedback=value.message;verdict=value.kind;
+  if(answeredCorrectly()){keyFocus=keyFocus||focus=="answer";focus="lesson-next";}
+  if(value.kind==Verdict::Correct&&app.lessonCompleted(lesson)&&store.writable()&&!app.unsavedChanges)
+   notice="Lesson complete. Progress and streak saved automatically.";
+ }
+ void answerFeedback(float x,float& y,float width){
+  const bool correct=answeredCorrectly();
+  const Color ink=correct?success:warm;
+  const float height=paragraphHeight(feedback,width-36,16)+28;
+  surface({x,y,width,height},correct?Color{23,48,43,255}:Color{50,39,43,255});
+  paragraph(feedback,x+18,y+14,width-36,16,ink);
+  y+=height+12;
+ }
  void helpHints(float x,float& y,float width){
-  if(button("hints",showHelp?"Hide hints":"Need a hint?",{x,y,width,42},false,true,true))showHelp=!showHelp;y+=52;
+  if(button("hints",showHelp?"Hide hints":"Need a hint?",{x,y,136,38},false,true,true))showHelp=!showHelp;
+  y+=46;
   if(!showHelp)return;
-  if(stage!=1 && stage!=2){y=paragraph(lessons[lesson].objective,x,y,width,16);return;}
-  for(int i=0;i<3;++i){if(button("hint:"+std::to_string(i),std::to_string(i+1)+". "+(i==0?"Concept":i==1?"Guidance":"Explanation"),{x,y,width,42})){if(app.help(lesson,question))notice=lessons[lesson].questions[question].hints[i];}y+=50;}
-  y=paragraph(notice,x,y,width,16);
+  const std::array<const char*,3> labels{"Concept","More guidance","Explanation"};
+  for(int i=0;i<3;++i){
+   if(button("hint:"+std::to_string(i),labels[i],{x+i*136.f,y,126,38})&&app.help(lesson,question))
+    hint=lessons[lesson].questions[question].hints[i];
+  }
+  y=paragraph(hint,x,y+50,width,16)+8;
  }
- void codingExercise(float x,float& y,float width){
-  auto exercise=labFor(lessons[lesson].id);text("Coding exercise",x,y,23,fg,true);y+=40;
-  y=paragraph(exercise.instructions,x,y,width,18,fg)+16;
-  for(const auto& test:exercise.cases)y=paragraph("Input: "+escaped(test.input)+"   Expected: "+escaped(test.expected),x,y,width,15,muted)+8;
-  if(button("run-exercise",busy?"Running...":"Run & check your code",{x,y,width,44},true,!busy)){codeVisible=true;startRun();}y+=62;
-  y=paragraph(app.labPassed(lesson)?"Coding exercise passed and saved.":"Edit the code in the workbench, then run it against the authored tests. Passing results save automatically.",x,y,width,16,app.labPassed(lesson)?success:muted)+20;
-  y=paragraph("Knowledge checks are recorded separately. Complete both checks and the coding exercise to finish this lesson.",x,y,width,16)+24;
+ void exampleCode(const std::string& source,float x,float& y,float width){
+  std::istringstream input(source);std::string row;
+  const float size=15, lineHeight=23;
+  const size_t columns=std::max(1.f,(width-32)/measure("M",size,true));
+  std::vector<std::string> rows;
+  while(std::getline(input,row)){
+   if(row.empty())rows.emplace_back();
+   for(size_t start=0;start<row.size();start+=columns)
+    rows.push_back(row.substr(start,columns));
+  }
+  surface({x,y,width,24+lineHeight*rows.size()},codeBg);
+  y+=12;
+  for(const auto& codeRow:rows){
+   drawText(codeRow,{x+16,y},size,fg,true);
+   y+=lineHeight;
+  }
+  y+=28;
  }
- void material(Rectangle r){
-  materialTabs(r.x,r.width);clipping({r.x,140,r.width,r.y+r.height-140});float x=r.x+28,width=r.width-56,y=160-materialScroll;
-  if(tab==1){text("Your lesson notes",x,y,25,fg,true);paragraph("Private notes, saved on this Mac.",x,y+42,width,16);editorWidget("notes",notes(),{x,y+82,width,std::max(180.f,r.height-210)},16,false);return;}
-  if(tab==2){text("Discussion",x,y,25,fg,true);y=paragraph("Shared discussions are not connected in this offline app. Your private lesson notes are always available.",x,y+50,width,18);if(button("open-notes","Open Notes",{x,y+20,170,44},true))tab=1;return;}
-  for(int i=0;i<4;++i)if(button("stage:"+std::to_string(i),std::vector<std::string>{"Read","Practice","Fresh","Summary"}[i],{x+i*(width/4),y,width/4-8,36},false,true,true,stage==i))setStage(i);
-  y+=66;text(lessons[lesson].title,x,y,25,fg,true);y+=48;
-  if(stage==0){y=paragraph(lessons[lesson].body,x,y,width,app.profile.textSize,fg)+24;text("Your turn",x,y,23,fg,true);y=paragraph(labFor(lessons[lesson].id).instructions,x,y+42,width,18,fg)+24;if(button("start-practice","Start practice",{x,y,200,44},true))setStage(1);y+=64;}
-  else if(stage==1){codingExercise(x,y,width);prediction(x,y,width);}
-  else if(stage==2)prediction(x,y,width);
-  else{y=paragraph(std::to_string(app.completed(lesson))+" of 2 knowledge checks solved. Coding exercise: "+(app.labPassed(lesson)?"passed":"not passed")+". Progress saves automatically; fresh-check evidence remains separate.",x,y,width,18,fg)+18;for(int q=0;q<3;++q)y=paragraph((q==2?"Fresh check: ":"Practice "+std::to_string(q+1)+": ")+app.status(lesson,q),x,y,width,16)+16;}
-  helpHints(x,y,width);materialExtent=std::max(0.f,y+materialScroll-(r.y+r.height-30));
+ void walkthrough(const Lesson& item,float x,float& y,float width){
+  walkthroughStep=std::clamp(walkthroughStep,0,static_cast<int>(item.steps.size())-1);
+  const auto& step=item.steps[walkthroughStep];
+  text("LINE "+std::to_string(walkthroughStep+1)+" / "+std::to_string(item.steps.size()),x,y,13,accent,true);
+  y+=24;
+  exampleCode(step.code,x,y,width);
+  const float stateHeight=paragraphHeight(step.state,width-36,16);
+  const float panelHeight=paragraphHeight(step.explanation,width-36,17)+stateHeight+56;
+  surface({x,y,width,panelHeight},card);
+  text("What changes",x+18,y+14,14,muted,true);
+  paragraph(step.state,x+18,y+37,width-36,16,accent);
+  paragraph(step.explanation,x+18,y+43+stateHeight,width-36,17,fg);
+  y+=panelHeight+14;
+  if(button("walk-back","Previous line",{x,y,130,40},false,walkthroughStep>0))moveWalkthrough(-1);
+  if(button("walk-next","Next line",{x+width-130,y,130,40},false,walkthroughStep+1<static_cast<int>(item.steps.size())))moveWalkthrough(1);
+  y+=54;
+ }
+ void moveWalkthrough(int change){
+  walkthroughStep+=change;
+  app.resume(lesson,Read,0,walkthroughStep);
+ }
+ void lessonExample(const Lesson& item,float x,float& y,float width){
+  text("Example",x,y+6,21,fg,true);
+  if(!item.steps.empty()&&validateWalkthrough(item.steps).empty()){
+   if(button("walk-toggle",walkthroughVisible?"Show full example":"Step through code",{x+width-166,y,166,38})){
+    walkthroughVisible=!walkthroughVisible;
+   }
+  }
+  y+=50;
+  if(walkthroughVisible)walkthrough(item,x,y,width);
+  else exampleCode(item.code,x,y,width);
  }
  void editorPointer(CodeEditor& editor,Rectangle r,float size,const std::string& id){
   if(options.referenceTest||!hit(r,id))return;
@@ -529,14 +616,13 @@ struct ReferenceApp {
  bool currentResult(){return resultLesson==lesson && result.sourceHash==sourceHash(code().value()) && runGeneration==store.activeGeneration();}
  void startRun(){
   if(busy)return;
-  if(stage==1||stage==2)if(!app.help(lesson,question)){notice="Cannot record assistance. Save progress before running code.";return;}
-  auto exercise=labFor(lessons[lesson].id);auto source=code().value();cancel.store(false);busy=true;outputScroll=0;resultLesson=lesson;runGeneration=store.activeGeneration();result={};
+  auto exercise=labFor(lessons[lesson].id);auto source=code().value();cancel.store(false);busy=true;showResults=false;resultLesson=lesson;runGeneration=store.activeGeneration();result={};
   future=std::async(std::launch::async,[this,exercise,source]{return runLab(exercise,source,executableFolder()/"CWaypointLabHelper",toolFolder(),&cancel);});
  }
  void pollRun(){
   if(!busy || future.wait_for(std::chrono::milliseconds(0))!=std::future_status::ready)return;
   try{result=future.get();}catch(const std::exception& e){result={};result.diagnostics=e.what();}
-  busy=false;notice=result.cancelled?"Run cancelled.":"Run finished. Review Output and Tests.";
+  busy=false;notice.clear();
   if(currentResult()&&result.allPassed())complete();
  }
  void complete(){
@@ -546,73 +632,229 @@ struct ReferenceApp {
   else notice="Could not save the coding result. "+app.notice;
  }
  void testLabAction(){
-  if(action=="assert-run-failed"){if(!result.compiled||result.allPassed()||app.learningUnits(lesson))throw std::runtime_error("Starter coding exercise must fail without progress");acted=action;}
+  if(action=="assert-run-failed"){if(!result.compiled||result.allPassed()||app.labPassed(lesson))throw std::runtime_error("Starter code must fail without earning coding credit");acted=action;}
   if(action=="edit-source"){code().insert("\n// Another revision\n");saveEditor("source",code());acted=action;}
   if(action=="assert-auto-complete"){if(!app.lessonCompleted(lesson)||!app.completedToday())throw std::runtime_error("Passing lab did not save completion automatically");acted=action;}
   if(action=="assert-stale"){if(currentResult())throw std::runtime_error("Edited source reused a stale result");acted=action;}
   if(action=="set-solution"){code().set(labFor(lessons[lesson].id).solution);saveEditor("source",code());acted=action;}
+  if(action=="assert-restore-undo")testRestoreUndo();
  }
- void runControls(Rectangle r){
-  if(button("reset-code",resetCode?"Confirm reset":"Reset",{r.x+20,r.y,resetCode?144.f:90.f,42})){if(resetCode){code().set(labFor(lessons[lesson].id).starter);saveEditor("source",code());resetCode=false;}else resetCode=true;}
-  if(resetCode && button("cancel-code-reset","Keep code",{r.x+174,r.y,110,42}))resetCode=false;
-  if(button("run-code",busy?"Cancel run":"Run & check",{r.x+r.width-148,r.y,128,42},true)){if(busy)cancel.store(true);else startRun();}
+ void testRestoreUndo(){
+  const auto exercise=labFor(lessons[lesson].id);
+  auto& editor=code();
+  if(editor.value()!=exercise.starter||!editor.undo()||editor.value().find("// Another revision")==std::string::npos)
+   throw std::runtime_error("Restoring starter code must be undoable");
+  editor.moveTo(0);saveEditor("source",editor);acted=action;
+ }
+ void editorOptions(float x,float& y,float width){
+  if(button("editor-options",resetCode?"Close options":"Editor options",{x+width-138,y,138,36},false,!busy,true))
+   resetCode=!resetCode;
+  y+=44;
+  if(!resetCode)return;
+  surface({x,y,width,86},card);
+  paragraph("Restore the original starter code. Press Command-Z to undo.",x+16,y+14,width-32,15,muted);
+  if(button("restore-starter","Restore starter code",{x+16,y+41,174,34},false,!busy)){
+   auto& editor=code();
+   editor.selectAll();
+   if(editor.insert(labFor(lessons[lesson].id).starter)){
+    editor.moveTo(0);editorX["source"]=editorY["source"]=0;
+    saveEditor("source",editor);
+    resetCode=false;focus="source";
+   }
+  }
+  y+=100;
+ }
+ float testCaseResult(const ProcessResult& run,const std::string& expected,size_t index,float x,float y,float width){
+  bool passed=run.exitCode==0&&!run.timedOut&&!run.outputLimited&&!run.cancelled&&run.output==expected;
+  std::string status=run.cancelled?"Stopped":passed?"Passed":"Failed";
+  y=paragraph("Test "+std::to_string(index+1)+"   "+status,x,y,width,15,passed?success:errorColor)+4;
+  y=paragraph("Your output: "+escaped(run.output),x,y,width,14,fg)+4;
+  if(run.timedOut)y=paragraph("Time limit reached.",x,y,width,15,errorColor);
+  if(run.outputLimited)y=paragraph("Output limit reached.",x,y,width,15,errorColor);
+  if(!run.error.empty())y=paragraph(run.error.substr(0,1200),x,y,width,14,errorColor)+8;
+  return paragraph("Expected: "+escaped(expected),x,y,width,14,muted)+12;
+ }
+ void showTestResults(float x,float& y,float width){
+  if(resultLesson!=lesson)return;
+  text("Test results",x,y,21,fg,true);
+  y+=34;
+  if(busy){y=paragraph("Running tests...",x,y,width,17,accent);return;}
+  if(result.cancelled){y=paragraph("Run stopped.",x,y,width,17,warm);return;}
+  if(!currentResult())y=paragraph("Code changed. Run the tests again to update these results.",x,y,width,16,warm)+8;
+  const auto exercise=labFor(lessons[lesson].id);
+  if(!result.diagnostics.empty())y=paragraph(result.diagnostics.substr(0,1600),x,y,width,15,errorColor)+12;
+  if(result.runs.empty())return;
+  const std::string summary=std::to_string(result.passed)+" of "+std::to_string(exercise.cases.size())+" tests passed";
+  y=paragraph(summary,x,y,width,17,result.allPassed()?success:fg)+10;
+  if(button("test-details",showResults?"Hide test details":"Show test details",{x,y,158,40}))showResults=!showResults;
+  y+=52;
+  if(!showResults)return;
+  for(size_t i=0;i<result.runs.size();++i){
+   y=testCaseResult(result.runs[i],exercise.cases[i].expected,i,x,y,width);
+  }
+ }
+ void codingTask(float x,float& y,float width){
+  const auto exercise=labFor(lessons[lesson].id);
+  y=paragraph(exercise.instructions,x,y,width,19,fg)+20;
+  text(lessons[lesson].track=="C"?"main.c":"main.cpp",x,y+11,16,muted,true);
+  editorOptions(x,y,width);
+  const float editorHeight=std::clamp(GetScreenHeight()-450.f,188.f,340.f);
+  editorWidget("source",code(),{x,y,width,editorHeight},study.preferences.editorSize,true);
+  y+=editorHeight+24;
+  showTestResults(x,y,width);
   testLabAction();
  }
- void output(Rectangle r){
-  if(hit(r,"output")&&GetMouseWheelMove()){outputScroll=std::clamp(outputScroll-GetMouseWheelMove()*36,0.f,outputExtent);wheelUsed=true;}
-  text("Output & Tests",r.x+24,r.y+12-outputScroll,19,fg,true);float y=r.y+48-outputScroll;
-  if(busy){paragraph("Compiling and running in the isolated lab...",r.x+24,y,r.width-48,16,accent);return;}
-  if(resultLesson!=lesson){paragraph("Run your C/C++ code to see output and test results.",r.x+24,y,r.width-48,16);return;}
-  if(!currentResult())text("Code changed. Run again to update tests.",r.x+24,y,15,warm);y+=28;
-  if(!result.diagnostics.empty())y=paragraph(result.diagnostics.substr(0,1600),r.x+24,y,r.width-48,14,errorColor)+12;
-  for(size_t i=0;i<result.runs.size();++i){auto& run=result.runs[i];auto expected=labFor(lessons[lesson].id).cases[i].expected;
-   std::string status=run.exitCode==0&&run.output==expected?"Passed":"Failed";
-   y=paragraph("Test "+std::to_string(i+1)+"  "+status+"  |  Output: "+escaped(run.output),r.x+24,y,r.width-48,15,status=="Passed"?success:errorColor)+8;
-   if(run.timedOut)y=paragraph("Time limit reached.",r.x+24,y,r.width-48,15,errorColor);
-   if(run.outputLimited)y=paragraph("Output limit reached.",r.x+24,y,r.width-48,15,errorColor);
-   if(!run.error.empty())y=paragraph(run.error.substr(0,1200),r.x+24,y,r.width-48,14,errorColor)+8;
-   y=paragraph("Expected: "+escaped(expected),r.x+24,y,r.width-48,14,muted)+12;
-  }outputExtent=std::max(0.f,y+outputScroll-r.y-r.height+20);
+ void lessonSummary(float x,float& y,float width){
+  const std::array<const char*,3> labels{"First knowledge check","Second knowledge check","Coding task"};
+  const std::array<bool,3> done{app.solved(lesson,0),app.solved(lesson,1),app.labPassed(lesson)};
+  for(int i=0;i<3;++i){
+   surface({x,y,width,52});
+   text(labels[i],x+16,y+17,16,fg);
+   text(done[i]?"Done":"To do",x+width-76,y+17,15,done[i]?success:muted);
+   y+=62;
+  }
+  y+=12;
+  if(button("solo","Try another question",{x,y,184,42}))setStage(Solo);
+  y+=56;
  }
- void workbench(Rectangle r){
-  clipping(r);DrawRectangleRec(r,codeBg);text(lessons[lesson].track=="C"?"<>  main.c":"<>  main.cpp",r.x+24,104,18,fg,true);
-  text("Offline WASI lab",r.x+r.width-165,106,14,muted);
-  float editorHeight=std::max(130.f,(r.height-260)*.65f);
-  editorWidget("source",code(),{r.x+12,146,r.width-24,editorHeight},study.preferences.editorSize,true);
-  float y=158+editorHeight;runControls({r.x,y,r.width,44});y+=56;
-  clipping({r.x,y,r.width,std::max(0.f,r.y+r.height-84-y)});output({r.x,y,r.width,r.y+r.height-y-84});clipping(r);
-  float bottom=r.y+r.height-74;DrawRectangleRec({r.x,bottom,r.width,74},currentResult()&&result.allPassed()?Color{28,39,32,255}:card);
-  std::string label=app.lessonCompleted(lesson)?"View summary":app.labPassed(lesson)?"Finish knowledge checks":currentResult()&&result.allPassed()?"Retry saving result":"Run & check";
-  if(button("mark-complete",label,{r.x+r.width-232,bottom+16,212,42},true,!busy))lessonAction();
-  text(std::to_string(app.learningUnits(lesson))+" of 3 "+(app.unsavedChanges||!store.writable()?"tasks in session":"tasks saved"),r.x+20,bottom+28,14,app.lessonCompleted(lesson)?success:muted);
+ int phase() const{
+  if(stage==Read)return 0;
+  if(stage==Practice||stage==Solo)return 1;
+  return stage==Coding?2:3;
  }
- void lessonAction(){
-  if(app.lessonCompleted(lesson)){setStage(3);codeVisible=false;return;}
-  if(app.labPassed(lesson)){setStage(1);question=app.solved(lesson,0)?1:0;app.resume(lesson,stage,question);codeVisible=false;return;}
-  if(currentResult()&&result.allPassed()){complete();return;}
-  codeVisible=true;startRun();
+ std::string stepTitle() const{
+  if(stage==Read)return lessons[lesson].title;
+  if(stage==Practice||stage==Solo)return lessons[lesson].questions[question].prompt;
+  if(stage==Coding)return "Write and test your code";
+  return app.lessonCompleted(lesson)?"Lesson complete":"Lesson summary";
  }
- void lessonNavigation(Rectangle r){
-  clipping(r);DrawRectangleRec(r,bg);
-  if(button("previous-step","< Previous",{r.x+16,r.y+10,130,40},false,stage>0,true))setStage(stage-1);
-  if(button("next-step","Next step >",{r.x+r.width-146,r.y+10,130,40},false,stage<3,true))setStage(stage+1);
+ void stepHeading(float x,float& y,float width){
+  const std::array<const char*,4> phases{"Learn","Practice","Code","Review"};
+  surface({x,y,width,42},codeBg);
+  const float cell=width/4;
+  for(int i=0;i<4;++i){
+   const bool active=i==phase();
+   const float left=x+i*cell;
+   if(active)surface({left+4,y+4,cell-8,34},selected,selected);
+   const float labelWidth=measure(phases[i],15);
+   text(phases[i],left+(cell-labelWidth)/2,y+12,15,active?accent:muted,active);
+  }
+  y+=66;
+  if(stage==Practice||stage==Solo){
+   const auto label=stage==Solo?"Extra practice":"Question "+std::to_string(question+1)+" of 2";
+   text(label,x,y,15,accent,true);
+   y+=28;
+  }
+  for(const auto& row:wrappedRows(stepTitle(),width,32)){text(row,x,y,32,fg,true);y+=44;}
+  y+=10;
+ }
+ void lessonBody(Rectangle r){
+  clipping(r);
+  float x=r.x,width=r.width,y=r.y+30-materialScroll;
+  if(showNotes){
+   text("Your lesson notes",x,y,32,fg,true);
+   y=paragraph("Notes are private and saved on this Mac.",x,y+52,width,17)+14;
+   editorWidget("notes",notes(),{x,y,width,std::max(180.f,r.height-150)},study.preferences.editorSize,false);
+   materialExtent=0;
+   return;
+  }
+  stepHeading(x,y,width);
+  switch(stage){
+   case Read:
+    y=paragraph(lessons[lesson].body,x,y,width,app.profile.textSize+1,fg)+22;
+    lessonExample(lessons[lesson],x,y,width);
+    break;
+   case Practice:
+   case Solo:
+    prediction(x,y,width);
+    break;
+   case Coding:
+    codingTask(x,y,width);
+    break;
+   case Summary:
+    lessonSummary(x,y,width);
+    break;
+  }
+  materialExtent=std::max(0.f,y+materialScroll-(r.y+r.height)+24);
+ }
+ void previousLessonStep(){
+  if(stage==Practice){setStage(question==0?Read:Practice);return;}
+  if(stage==Coding){setStage(Practice,1);return;}
+  if(stage==Summary){setStage(Coding);return;}
+  if(stage==Solo)setStage(Summary);
+ }
+ void nextLessonStep(){
+  if(stage==Read){setStage(Practice);return;}
+  if(stage==Practice){if(question==0)setStage(Practice,1);else setStage(Coding);return;}
+  if(stage==Coding||stage==Solo){setStage(Summary);return;}
+  if(!app.solved(lesson,0)){setStage(Practice);return;}
+  if(!app.solved(lesson,1)){setStage(Practice,1);return;}
+  if(!app.labPassed(lesson)){setStage(Coding);return;}
+  const int next=nextInTrack(lessons[lesson].track);
+  if(!app.lessonCompleted(next)){openLesson(next);return;}
+  const auto track=lessons[lesson].track;
+  navigate(Page::Courses);
+  if(page==Page::Courses)courseTrack=track;
+ }
+ std::string nextLessonLabel(){
+  if(stage==Read)return "Start questions";
+  if(stage==Practice)return question==0?"Next question":"Go to coding task";
+  if(stage==Solo)return "Back to summary";
+  if(stage==Coding)return "View summary";
+  if(!app.lessonCompleted(lesson))return "Finish remaining tasks";
+  return app.courseProgress(lessons[lesson].track)==100?"View course":"Next lesson";
+ }
+ void codingFeedback(float x,float y){
+  if(busy){text("Running tests...",x+100,y+14,15,muted);return;}
+  if(resultLesson!=lesson)return;
+  const bool current=currentResult();
+  const bool passed=current&&result.allPassed();
+  if(passed&&!app.labPassed(lesson)){
+   if(button("retry-result","Save result again",{x+100,y,148,44}))complete();
+   return;
+  }
+  const char* status=result.cancelled?"Run stopped":!current?"Edited since last run":passed?"All tests passed":"Check test results";
+  text(status,x+100,y+14,15,passed?success:muted);
+  if(button("jump-results","View results",{x+265,y,116,44},false,true,true))materialScroll=materialExtent;
+ }
+ void codingFooter(float x,float y,float width){
+  const bool passed=app.labPassed(lesson)&&!busy;
+  if(button("run-code",busy?"Stop run":passed?"Run again":"Run tests",{x+width-148,y,148,44},!passed)){
+   if(busy)cancel.store(true);else startRun();
+  }
+  codingFeedback(x,y);
+  if(passed&&button("lesson-next","View summary",{x+width-302,y,144,44},true))nextLessonStep();
+ }
+ void questionFooter(Rectangle r,float y){
+  const float right=r.x+r.width;
+  if(!answeredCorrectly()){
+   if(button("check-answer","Check answer",{right-158,y,158,44},true,!answer.empty()))checkAnswer();
+   const bool solved=app.solved(lesson,question);
+   const char* label=stage==Solo?"Back to summary":solved?"Continue":"Skip for now";
+   if(button("lesson-next",label,{right-318,y,144,44},false,true,true))nextLessonStep();
+   return;
+  }
+  if(button("lesson-next",nextLessonLabel(),{right-206,y,206,44},true))nextLessonStep();
+ }
+ void lessonFooter(Rectangle r){
+  clipping(r);DrawRectangleRec(r,bg);line(r.x,r.y,r.width);
+  const float y=r.y+10;
+  if(showNotes){
+   if(button("notes-done","Done",{r.x+r.width-116,y,116,44},true)){showNotes=false;focus.clear();}
+   return;
+  }
+  if(stage!=Read&&button("lesson-back","Back",{r.x,y,88,44},false,true,true))previousLessonStep();
+  if(stage==Coding){codingFooter(r.x,y,r.width);return;}
+  if(stage==Practice||stage==Solo){questionFooter(r,y);return;}
+  if(button("lesson-next",nextLessonLabel(),{r.x+r.width-206,y,206,44},true))nextLessonStep();
  }
  void lessonScreen(){
-  auto layout=referenceLayout(GetScreenWidth(),GetScreenHeight());float bottom=layout.bodyBottom;
-  if(layout.compact)bottom-=60;
-  if(layout.compact){
-   clipping({0,bottom,static_cast<float>(GetScreenWidth()),60});
-   if(button("modules","Modules",{20,bottom+8,110,40}))drawer=!drawer;
-   if(button("material-view","Material",{150,bottom+8,110,40},!codeVisible))codeVisible=false;
-   if(button("code-view","Code",{272,bottom+8,110,40},codeVisible))codeVisible=true;
-   if(codeVisible)workbench({0,80,static_cast<float>(GetScreenWidth()),bottom-80});
-   else{clipping({0,80,static_cast<float>(GetScreenWidth()),bottom-200});material({0,80,static_cast<float>(GetScreenWidth()),bottom-140});EndScissorMode();lessonNavigation({0,bottom-60,static_cast<float>(GetScreenWidth()),60});}
-   if(drawer)moduleRail({0,80,300,bottom-80});return;
-  }
-  moduleRail({0,80,layout.rail,bottom-80});
-  clipping({layout.materialX,80,layout.materialW,bottom-140});material({layout.materialX,80,layout.materialW,bottom-140});EndScissorMode();
-  lessonNavigation({layout.materialX,bottom-60,layout.materialW,60});
-  workbench({layout.codeX,80,layout.codeW,bottom-80});
+  const auto layout=referenceLayout(GetScreenWidth(),GetScreenHeight());
+  const float bodyHeight=layout.bodyBottom-layout.bodyTop;
+  lessonBody({layout.x,layout.bodyTop,layout.width,bodyHeight});
+  EndScissorMode();
+  scrollbar(layout.x+layout.width+22,layout.bodyTop+12,bodyHeight-24,materialScroll,bodyHeight-24+materialExtent);
+  lessonFooter({layout.x,layout.bodyBottom,layout.width,layout.footerHeight});
  }
  void compareContent(float x,float& y,float w){
   for(const auto& c:comparisons()){
@@ -623,7 +865,7 @@ struct ReferenceApp {
  void reviewContent(float x,float& y,float w){
   auto items=app.reviewItems();if(items.empty()){y=paragraph("No mistakes to review yet. Practice a lesson to build your review list.",x,y,w,18)+30;return;}
   for(const auto& item:items){text(lessons[item.lesson].title,x,y,23,fg,true);y+=40;y=paragraph(app.status(item.lesson,item.question),x,y,w,17)+16;
-   if(button("review-item:"+std::to_string(item.lesson)+":"+std::to_string(item.question),"Review question",{x,y,190,44})){openLesson(item.lesson);setStage(item.question==2?2:1);question=item.question;}
+   if(button("review-item:"+std::to_string(item.lesson)+":"+std::to_string(item.question),"Review question",{x,y,190,44})){openLesson(item.lesson);setStage(item.question==2?Solo:Practice,item.question);}
    y+=72;
   }
  }
@@ -655,7 +897,7 @@ struct ReferenceApp {
  }
  void scrollPage(){
   if(wheelUsed)return;float wheel=GetMouseWheelMove();if(!wheel)return;
-  if(page==Page::Lesson){auto l=referenceLayout(GetScreenWidth(),GetScreenHeight());if(GetMouseX()>=l.materialX&&GetMouseX()<l.materialX+l.materialW)materialScroll=std::clamp(materialScroll-wheel*42,0.f,materialExtent);}
+  if(page==Page::Lesson)materialScroll=std::clamp(materialScroll-wheel*42,0.f,materialExtent);
   else scroll=std::clamp(scroll-wheel*48,0.f,std::max(0.f,extent-GetScreenHeight()+24));
  }
  void scrollbar(float x,float top,float height,float offset,float total){
@@ -669,7 +911,7 @@ struct ReferenceApp {
   EndScissorMode();if(page!=Page::Lesson)scrollbar(GetScreenWidth()-8,88,GetScreenHeight()-120,scroll,extent-80);header();popup();EndScissorMode();helpOverlay();leaveDialog();closeFailure();EndScissorMode();footer();previousControls=controls;scrollPage();
  }
  void testInputValue(){testValue=question==0?"5":"int";
-  if(testAction==6)testValue="incorrect";
+  if(testAction==9)testValue="incorrect";
   if(action=="type:note")testValue="My saved lesson note.";
   if(action=="type:name")testValue="Tymofii";
   if(action=="type:search")testValue="C++";
@@ -685,23 +927,23 @@ struct ReferenceApp {
   if(testAction>=testActions.size())return;
   action=testActions[testAction];testInputValue();
   if(action=="wait-run"){if(!busy){++testAction;testIdle=0;}action.clear();return;}
-  const std::set<std::string> codeActions{"set-solution","edit-source","assert-stale","run-code","mark-complete","assert-auto-complete","assert-run-failed"};
-  if(codeActions.count(action)&&referenceLayout(GetScreenWidth(),GetScreenHeight()).compact&&!codeVisible)action="code-view";
-  const std::set<std::string> materialActions{"type:answer","check-answer","next-question","run-exercise","tab:notes"};
-  if(materialActions.count(action)&&referenceLayout(GetScreenWidth(),GetScreenHeight()).compact&&codeVisible)action="material-view";
-  if(++testIdle>180){std::cerr<<"Reference failure: step="<<testAction<<" width="<<GetScreenWidth()<<" codeVisible="<<codeVisible<<" stage="<<stage<<" practice="<<app.completed(lesson)<<" compiled="<<result.compiled<<" passed="<<result.passed<<" current="<<currentResult()<<" diagnostics="<<result.diagnostics<<'\n';captureScreenshot((std::filesystem::path(options.profile)/"failed-reference.png").c_str());throw std::runtime_error("Reference journey could not activate "+action);}
+  if(++testIdle>180){std::cerr<<"Reference failure: step="<<testAction<<" width="<<GetScreenWidth()<<" stage="<<stage<<" practice="<<app.completed(lesson)<<" compiled="<<result.compiled<<" passed="<<result.passed<<" current="<<currentResult()<<" diagnostics="<<result.diagnostics<<'\n';captureScreenshot((std::filesystem::path(options.profile)/"failed-reference.png").c_str());throw std::runtime_error("Reference journey could not activate "+action);}
  }
  void finishTestFrame(){
   if(action.empty()||acted!=action)return;
-  if(action=="code-view"||action=="material-view")return;
-  if(!options.capture.empty()){if(action=="save-preferences")pendingImage="settings-footer.png";if(action=="run-code")pendingImage="highlighted-editor.png";captureDelay=2;}
+  if(!options.capture.empty()){
+   if(action=="save-preferences")pendingImage="settings-footer.png";
+   if(action=="assert-auto-complete")pendingImage="highlighted-editor.png";
+   if(action=="lesson-next"&&stage==Practice)pendingImage=question==0?"knowledge-check.png":"missing-type.png";
+   captureDelay=4;
+  }
   ++testAction;testIdle=0;
  }
  void captureFrame(){if(pendingImage.empty()||--captureDelay>0)return;captureScreenshot((std::filesystem::path(options.capture)/pendingImage).c_str());pendingImage.clear();}
  bool verifyTest(){
   if(!options.referenceTest||testAction<testActions.size())return false;
   auto& e=study.entries[lessons[0].id];
-  if(!app.lessonCompleted(0)||!e.bookmark||e.note!="My saved lesson note."||study.preferences.name!="Tymofii"||study.preferences.goal!=3||study.preferences.editorSize!=16||!study.preferences.lightEditor)throw std::runtime_error("Reference journey persistence assertion failed");
+  if(!app.lessonCompleted(0)||e.note!="My saved lesson note."||study.preferences.name!="Tymofii"||study.preferences.goal!=3||study.preferences.editorSize!=16||!study.preferences.lightEditor)throw std::runtime_error("Reference journey persistence assertion failed");
   if(app.profile.evidence.at(lessons[0].questions[0].id).attempts!=2)throw std::runtime_error("Changed answers must record twice; duplicate clicks once");
   StudyStore restored(store);if(restored.preferences.name!="Tymofii"||restored.entries.at(lessons[0].id).note!="My saved lesson note."||store.load().achievements.empty())throw std::runtime_error("Reference saved state reload failed");
   std::cout<<"Reference screen journey: PASS\n";return true;
@@ -712,10 +954,16 @@ struct ReferenceApp {
  }
  void unload(){if(busy){cancel.store(true);future.wait();}study.save();UnloadTexture(fire);for(auto& entry:fonts)UnloadFont(entry.second);}
 };
+std::pair<int,int> initialWindowSize(const AppOptions& options){
+ if(options.compact)return {1000,740};
+ if(options.referenceTest)return {1600,1000};
+ return {1280,780};
+}
 } // namespace
 int checkPackagedRunner(){auto exercise=labFor("c-variables");auto result=runLab(exercise,exercise.solution,executableFolder()/"CWaypointLabHelper",toolFolder());std::cout<<"Packaged runner: "<<(result.allPassed()?"PASS":"FAIL")<<'\n';return result.allPassed()?0:1;}
 int runReferenceApp(const AppOptions& options,const std::vector<Lesson>& lessons,Store& store,Controller& controller){
- SetConfigFlags(FLAG_WINDOW_RESIZABLE|FLAG_WINDOW_HIGHDPI|FLAG_MSAA_4X_HINT);InitWindow(options.compact?1000:1600,options.compact?740:1000,"CWaypoint");SetWindowMinSize(960,640);SetExitKey(KEY_NULL);SetTargetFPS(60);
+ const auto [width,height]=initialWindowSize(options);
+ SetConfigFlags(FLAG_WINDOW_RESIZABLE|FLAG_WINDOW_HIGHDPI|FLAG_MSAA_4X_HINT);InitWindow(width,height,"CWaypoint");SetWindowMinSize(960,640);SetExitKey(KEY_NULL);SetTargetFPS(60);
  ReferenceApp ui(options,lessons,store,controller);ui.assets();
  if(options.referenceTest||!options.capture.empty())std::cout<<"Display: logical="<<GetScreenWidth()<<"x"<<GetScreenHeight()<<" framebuffer="<<GetRenderWidth()<<"x"<<GetRenderHeight()<<" scale="<<ui.pixelScale()<<"\n";controller.enableLabMode();
  if(options.initial=="lesson")ui.resume();

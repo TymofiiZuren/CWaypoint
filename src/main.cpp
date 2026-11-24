@@ -1228,9 +1228,9 @@ struct UI {
   void questionInput() {
     const auto& l=lessons[lesson];
       const auto &q = l.questions[question];
-      const std::string &questionCode = q.code.empty() ? l.code : q.code;
+      const std::string &questionCode = questionContext(l,q);
       heading(q.prompt);
-      code(questionCode, l.id + ":example", "Question code", true);
+      if (!questionCode.empty()) code(questionCode, l.id + ":example", "Question code", true);
       if (q.type == QuestionType::Choice) {
         paragraph("Choose one answer, then select Check answer.",muted,16);
         for (const auto &choice : q.choices) {
