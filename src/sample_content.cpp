@@ -105,6 +105,7 @@ std::vector<Lesson> sampleLessons() {
         {"c-cond-fresh", "A gate opens if height > 120 and stays closed otherwise. At height 120, enter open or closed.", "closed", {},
          {"Look carefully at the operator.", "A strict greater-than test excludes equality.", "120 is equal to 120, so the gate stays closed."},
          QuestionType::Token, "The strict > comparison is false at equality."}}, {}});
+  lessons[3].questions[0].code = lessons[3].code;
   lessons[3].questions[1].code = lessons[3].code;
   lessons[3].questions[1].code.replace(lessons[3].questions[1].code.find("50"),2,"49");
   lessons[3].questions[2].code = "int height = 120;\nif (height > 120) {\n    puts(\"open\");\n} else {\n    puts(\"closed\");\n}";

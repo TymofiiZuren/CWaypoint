@@ -12,6 +12,12 @@ int main() {
   require(lesson.id == "c-variables" && lesson.revision == 2, "stable application identity and new revision");
   require(lesson.title == source.title && lesson.body == source.explanation && lesson.code == source.code, "authored teaching text retained");
   require(validate({lesson}).empty(), "adapted lesson contract");
+  const auto& fill = lesson.questions[1];
+  require(questionContext(lesson,fill)=="___ score = 3;", "fill-in question shows only the incomplete declaration");
+  auto standalone = fill;
+  standalone.code.clear();
+  require(questionContext(lesson,standalone).empty(), "standalone question cannot reveal the worked example");
+  require(questionContext(lesson,lesson.questions[0])==lesson.code, "output prediction retains its example");
   require(lesson.questions[2].code.find("int b = a;") != std::string::npos, "fresh check has matching code context");
   require(validateWalkthrough(lesson.steps).empty(), "existing walkthrough retained");
   for (size_t i=0;i<3;++i) {
